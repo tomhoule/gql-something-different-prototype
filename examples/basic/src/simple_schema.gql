@@ -1,0 +1,10 @@
+type Pizza {
+  name: String!
+  toppings: [String!]!
+  nutritionalInfo: String
+  price: Int
+}
+
+type Query {
+  pizzas: [Pizza!]!
+}

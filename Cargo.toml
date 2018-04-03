@@ -1,0 +1,15 @@
+[package]
+name = "tokio-gql"
+version = "0.1.0"
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+
+[dependencies]
+futures = "^0.1.20"
+serde_json = "^1.0"
+graphql-parser = "0.2.0"
+
+[workspace]
+members = [
+    "./",
+    "./examples/basic",
+]
