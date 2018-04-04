@@ -5,6 +5,11 @@ type Pizza {
   price: Int
 }
 
+type Pasta {
+  sauce: String
+}
+
 type Query {
   pizzas: [Pizza!]!
+  pasta(by_sauce: String): [Pasta!]!
 }

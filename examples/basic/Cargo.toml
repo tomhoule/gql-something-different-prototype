@@ -5,3 +5,4 @@ authors = ["Tom Houlé <tom@tomhoule.com>"]
 
 [dependencies]
 graphql-parser = "0.2.0"
+tokio-gql = { path = "../../" }

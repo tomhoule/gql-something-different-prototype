@@ -1,0 +1,13 @@
+[package]
+name = "something-different-derive"
+version = "0.1.0"
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+graphql-parser = "^0.2.0"
+heck = "*"
+syn = "*"
+quote = "*"

@@ -7,9 +7,11 @@ authors = ["Tom Houlé <tom@tomhoule.com>"]
 futures = "^0.1.20"
 serde_json = "^1.0"
 graphql-parser = "0.2.0"
+something-different-derive = { path = "./something-different-derive" }
 
 [workspace]
 members = [
     "./",
     "./examples/basic",
+    "./something-different-derive",
 ]
