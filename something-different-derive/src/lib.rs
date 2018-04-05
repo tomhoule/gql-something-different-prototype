@@ -53,17 +53,56 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
         })
         .collect();
 
-    println!("field names {:?}", query_field_names);
+    let object_types = extract_object_types(&parsed_schema);
+    let object_types: Vec<quote::Tokens> = object_types
+        .iter()
+        .map(|object_type| {
+            let enum_name: syn::Ident = format!("{}Field", object_type.name).into();
+            let struct_name: syn::Ident = object_type.name.as_str().into();
+            let field_names: Vec<quote::Tokens> = object_type
+                .fields
+                .iter()
+                .map(|f| {
+                    let ident: syn::Ident = f.name.clone().into();
+                    if f.arguments.is_empty() {
+                        quote!(#ident)
+                    } else {
+                        let args: Vec<quote::Tokens> = f.arguments
+                            .iter()
+                            .map(|arg| {
+                                let field_name: syn::Ident = arg.name.clone().into();
+                                let field_type = gql_type_to_json_type(&arg.value_type);
+                                quote!( #field_name: #field_type )
+                            })
+                            .collect();
+                        quote!{#ident { #(#args),* }}
+                    }
+                })
+                .collect();
+            quote!(
+        enum #enum_name {
+            #(#field_names),*
+        }
+
+        struct #struct_name {
+            selected_fields: Vec<#enum_name>,
+        }
+    )
+        })
+        .collect();
+
+    // enum QueryField {
+    //     #(#query_field_names),*
+    // }
+
+    // struct Query {
+    //     selected_fields: Vec<QueryField>,
+    // }
     quote! {
         const THE_SCHEMA: &'static str = #the_schema;
 
-        enum QueryField {
-            #(#query_field_names),*
-        }
 
-        struct Query {
-            selected_fields: Vec<QueryField>,
-        }
+        #(#object_types)*
     }
 }
 
@@ -103,10 +142,39 @@ fn extract_query(
     None
 }
 
-fn gql_type_to_json_type(gql_type: graphql_parser::query::Type) -> syn::Ident {
+fn extract_object_types(
+    document: &graphql_parser::schema::Document,
+) -> Vec<&graphql_parser::schema::ObjectType> {
+    use graphql_parser::schema::*;
+
+    document
+        .definitions
+        .iter()
+        .filter_map(|def| {
+            if let Definition::TypeDefinition(TypeDefinition::Object(obj)) = def {
+                Some(obj)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {
     use graphql_parser::query::Type::*;
 
     match gql_type {
-        NamedType(name) => name.into(),
+        NamedType(name) => {
+            let ident: syn::Ident = name.as_str().into();
+            quote!(Option<#ident>)
+        }
+        ListType(inner) => {
+            let inner_converted = gql_type_to_json_type(&inner);
+            quote!(Vec<#inner_converted>)
+        }
+        NonNullType(inner) => {
+            let inner_converted = gql_type_to_json_type(&inner);
+            quote!(#inner_converted)
+        }
     }
 }
