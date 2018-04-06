@@ -19,34 +19,12 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
 }
 
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
-    let name = &ast.ident;
     let schema_path = extract_path(&ast.attrs).expect("path not specified");
     let mut file = File::open(schema_path).expect("File not found");
     let mut the_schema_string = String::new();
     file.read_to_string(&mut the_schema_string).unwrap();
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let the_schema = syn::Lit::from(the_schema_string);
-    let query = extract_query(&parsed_schema).expect("Could not find Query type");
-    let query_field_names: Vec<quote::Tokens> = query
-        .fields
-        .iter()
-        .map(|f| {
-            let ident: syn::Ident = f.name.clone().into();
-            if f.arguments.is_empty() {
-                quote!(#ident)
-            } else {
-                let args: Vec<quote::Tokens> = f.arguments
-                    .iter()
-                    .map(|arg| {
-                        let field_name: syn::Ident = arg.name.clone().into();
-                        let field_type: syn::Ident = "SomeType".into();
-                        quote!( #field_name: #field_type )
-                    })
-                    .collect();
-                quote!{#ident { #(#args),* }}
-            }
-        })
-        .collect();
 
     let object_types = extract_object_types(&parsed_schema);
     let object_types: Vec<quote::Tokens> = object_types.iter().map(|ty| gql_type_to_rs(ty)).collect();
@@ -60,10 +38,9 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
 }
 
 fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
-    let outer_ident: syn::Ident = "SomethingCompletelyDifferent".into();
     let path_ident: syn::Ident = "path".into();
     for attr in attributes.iter() {
-        if let syn::MetaItem::List(ident, items) = &attr.value {
+        if let syn::MetaItem::List(_ident, items) = &attr.value {
             for item in items.iter() {
                 if let syn::NestedMetaItem::MetaItem(syn::MetaItem::NameValue(
                     name,
@@ -114,20 +91,20 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
     )
 }
 
-fn extract_query(
-    document: &graphql_parser::schema::Document,
-) -> Option<&graphql_parser::schema::ObjectType> {
-    use graphql_parser::schema::*;
+// fn extract_query(
+//     document: &graphql_parser::schema::Document,
+// ) -> Option<&graphql_parser::schema::ObjectType> {
+//     use graphql_parser::schema::*;
 
-    for definition in document.definitions.iter() {
-        if let Definition::TypeDefinition(TypeDefinition::Object(obj)) = definition {
-            if obj.name == "Query" {
-                return Some(obj);
-            }
-        }
-    }
-    None
-}
+//     for definition in document.definitions.iter() {
+//         if let Definition::TypeDefinition(TypeDefinition::Object(obj)) = definition {
+//             if obj.name == "Query" {
+//                 return Some(obj);
+//             }
+//         }
+//     }
+//     None
+// }
 
 fn extract_object_types(
     document: &graphql_parser::schema::Document,
@@ -152,8 +129,15 @@ fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Token
 
     match gql_type {
         NamedType(name) => {
-            let ident: syn::Ident = name.as_str().into();
-            quote!(Option<#ident>)
+            match name.as_str() {
+                "Boolean" => {
+                    quote!(Option<bool>)
+                },
+                _ => {
+                    let ident: syn::Ident = name.as_str().into();
+                    quote!(Option<#ident>)
+                }
+            }
         }
         ListType(inner) => {
             let inner_converted = gql_type_to_json_type(&inner);
@@ -223,7 +207,7 @@ mod tests {
                     .unwrap()
             ),
             quote!{
-                enum PastaField { shape { strict: Option<Boolean> }, ingredients { filter: Option<String> } }
+                enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
                 struct Pasta { selected_fields: Vec<PastaField>, }
             }
         )
