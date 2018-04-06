@@ -21,11 +21,6 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let name = &ast.ident;
     let schema_path = extract_path(&ast.attrs).expect("path not specified");
-    // panic!(
-    //     "schema_path {:?} (cwd: {:?}",
-    //     &schema_path,
-    //     &std::env::current_dir()
-    // );
     let mut file = File::open(schema_path).expect("File not found");
     let mut the_schema_string = String::new();
     file.read_to_string(&mut the_schema_string).unwrap();
@@ -54,50 +49,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
         .collect();
 
     let object_types = extract_object_types(&parsed_schema);
-    let object_types: Vec<quote::Tokens> = object_types
-        .iter()
-        .map(|object_type| {
-            let enum_name: syn::Ident = format!("{}Field", object_type.name).into();
-            let struct_name: syn::Ident = object_type.name.as_str().into();
-            let field_names: Vec<quote::Tokens> = object_type
-                .fields
-                .iter()
-                .map(|f| {
-                    let ident: syn::Ident = f.name.clone().into();
-                    if f.arguments.is_empty() {
-                        quote!(#ident)
-                    } else {
-                        let args: Vec<quote::Tokens> = f.arguments
-                            .iter()
-                            .map(|arg| {
-                                let field_name: syn::Ident = arg.name.clone().into();
-                                let field_type = gql_type_to_json_type(&arg.value_type);
-                                quote!( #field_name: #field_type )
-                            })
-                            .collect();
-                        quote!{#ident { #(#args),* }}
-                    }
-                })
-                .collect();
-            quote!(
-        enum #enum_name {
-            #(#field_names),*
-        }
+    let object_types: Vec<quote::Tokens> = object_types.iter().map(|ty| gql_type_to_rs(ty)).collect();
 
-        struct #struct_name {
-            selected_fields: Vec<#enum_name>,
-        }
-    )
-        })
-        .collect();
-
-    // enum QueryField {
-    //     #(#query_field_names),*
-    // }
-
-    // struct Query {
-    //     selected_fields: Vec<QueryField>,
-    // }
     quote! {
         const THE_SCHEMA: &'static str = #the_schema;
 
@@ -125,6 +78,40 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
         }
     }
     None
+}
+
+fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::Tokens {
+    let enum_name: syn::Ident = format!("{}Field", object_type.name).into();
+    let struct_name: syn::Ident = object_type.name.as_str().into();
+    let field_names: Vec<quote::Tokens> = object_type
+        .fields
+        .iter()
+        .map(|f| {
+            let ident: syn::Ident = f.name.clone().into();
+            if f.arguments.is_empty() {
+                quote!(#ident)
+            } else {
+                let args: Vec<quote::Tokens> = f.arguments
+                    .iter()
+                    .map(|arg| {
+                        let field_name: syn::Ident = arg.name.clone().into();
+                        let field_type = gql_type_to_json_type(&arg.value_type);
+                        quote!( #field_name: #field_type )
+                    })
+                    .collect();
+                quote!{#ident { #(#args),* }}
+            }
+        })
+        .collect();
+    quote!(
+        enum #enum_name {
+            #(#field_names),*
+        }
+
+        struct #struct_name {
+            selected_fields: Vec<#enum_name>,
+        }
+    )
 }
 
 fn extract_query(
@@ -176,5 +163,40 @@ fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Token
             let inner_converted = gql_type_to_json_type(&inner);
             quote!(#inner_converted)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graphql_parser::schema::*;
+
+    #[test]
+    fn basic_object_derive() {
+        let gql = r#"
+        type Pasta {
+            shape: String!
+            ingredients: [String!]!
+        }
+        "#;
+        let parsed = parse_schema(gql).unwrap();
+        assert_eq!(
+            gql_type_to_rs(
+                parsed
+                    .definitions
+                    .iter()
+                    .filter_map(|d| if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
+                        Some(ty)
+                    } else {
+                        None
+                    })
+                    .next()
+                    .unwrap()
+            ),
+            quote!{
+                enum PastaField { shape, ingredients }
+                struct Pasta { selected_fields: Vec<PastaField>, }
+            }
+        )
     }
 }

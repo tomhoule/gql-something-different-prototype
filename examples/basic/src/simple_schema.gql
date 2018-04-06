@@ -10,6 +10,6 @@ type Pasta {
 }
 
 type Query {
-  pizzas: [Pizza!]!
-  pasta(by_sauce: String): [Pasta!]!
+  pizzas: [Pizza!]
+  pasta(by_sauce: String): [Pasta!]
 }
