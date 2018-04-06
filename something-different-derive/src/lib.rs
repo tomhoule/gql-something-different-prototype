@@ -199,4 +199,33 @@ mod tests {
             }
         )
     }
+
+    #[test]
+    fn object_derive_with_scalar_input() {
+        let gql = r#"
+        type Pasta {
+            shape(strict: Boolean): String!
+            ingredients(filter: String!): [String!]!
+        }
+        "#;
+        let parsed = parse_schema(gql).unwrap();
+        assert_eq!(
+            gql_type_to_rs(
+                parsed
+                    .definitions
+                    .iter()
+                    .filter_map(|d| if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
+                        Some(ty)
+                    } else {
+                        None
+                    })
+                    .next()
+                    .unwrap()
+            ),
+            quote!{
+                enum PastaField { shape { strict: Option<Boolean> }, ingredients { filter: Option<String> } }
+                struct Pasta { selected_fields: Vec<PastaField>, }
+            }
+        )
+    }
 }
