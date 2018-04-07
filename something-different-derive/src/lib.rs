@@ -20,6 +20,11 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
 
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let schema_path = extract_path(&ast.attrs).expect("path not specified");
+    let cargo_manifest_dir =
+        ::std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env variable is defined");
+    // We need to qualify the schema with the path to the crate it is part of
+    let schema_path = format!("{}/{}", cargo_manifest_dir, schema_path);
+    // panic!("schema_path: {}", schema_path,);
     let mut file = File::open(schema_path).expect("File not found");
     let mut the_schema_string = String::new();
     file.read_to_string(&mut the_schema_string).unwrap();
@@ -27,10 +32,11 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let the_schema = syn::Lit::from(the_schema_string);
 
     let object_types = extract_object_types(&parsed_schema);
-    let object_types: Vec<quote::Tokens> = object_types.iter().map(|ty| gql_type_to_rs(ty)).collect();
+    let object_types: Vec<quote::Tokens> =
+        object_types.iter().map(|ty| gql_type_to_rs(ty)).collect();
 
     quote! {
-        const THE_SCHEMA: &'static str = #the_schema;
+        pub const THE_SCHEMA: &'static str = #the_schema;
 
 
         #(#object_types)*
@@ -81,11 +87,11 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
         })
         .collect();
     quote!(
-        enum #enum_name {
+        pub enum #enum_name {
             #(#field_names),*
         }
 
-        struct #struct_name {
+        pub struct #struct_name {
             selected_fields: Vec<#enum_name>,
         }
     )
@@ -128,17 +134,13 @@ fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Token
     use graphql_parser::query::Type::*;
 
     match gql_type {
-        NamedType(name) => {
-            match name.as_str() {
-                "Boolean" => {
-                    quote!(Option<bool>)
-                },
-                _ => {
-                    let ident: syn::Ident = name.as_str().into();
-                    quote!(Option<#ident>)
-                }
+        NamedType(name) => match name.as_str() {
+            "Boolean" => quote!(Option<bool>),
+            _ => {
+                let ident: syn::Ident = name.as_str().into();
+                quote!(Option<#ident>)
             }
-        }
+        },
         ListType(inner) => {
             let inner_converted = gql_type_to_json_type(&inner);
             quote!(Vec<#inner_converted>)
@@ -169,10 +171,12 @@ mod tests {
                 parsed
                     .definitions
                     .iter()
-                    .filter_map(|d| if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
-                        Some(ty)
-                    } else {
-                        None
+                    .filter_map(|d| {
+                        if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
+                            Some(ty)
+                        } else {
+                            None
+                        }
                     })
                     .next()
                     .unwrap()
@@ -198,10 +202,12 @@ mod tests {
                 parsed
                     .definitions
                     .iter()
-                    .filter_map(|d| if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
-                        Some(ty)
-                    } else {
-                        None
+                    .filter_map(|d| {
+                        if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
+                            Some(ty)
+                        } else {
+                            None
+                        }
                     })
                     .next()
                     .unwrap()

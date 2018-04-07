@@ -12,6 +12,8 @@ something-different-derive = { path = "./something-different-derive" }
 [workspace]
 members = [
     "./",
-    "./examples/basic",
-    "./something-different-derive",
+    "examples/basic",
+    "examples/library",
+    "examples/library/included_library",
+    "something-different-derive",
 ]

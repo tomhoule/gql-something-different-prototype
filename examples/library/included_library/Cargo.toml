@@ -1,0 +1,7 @@
+[package]
+name = "included_library"
+version = "0.1.0"
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+
+[dependencies]
+tokio-gql = { path = "../../../" }
