@@ -8,7 +8,7 @@ extern crate quote;
 use std::fs::File;
 use std::io::prelude::*;
 
-use graphql_parser::schema::{EnumType, InputObjectType, ObjectType, UnionType};
+use graphql_parser::schema::{EnumType, InputObjectType, InterfaceType, ObjectType, UnionType};
 use heck::*;
 use proc_macro::TokenStream;
 use std::collections::{HashMap, HashSet};
@@ -16,8 +16,10 @@ use std::collections::{HashMap, HashSet};
 struct DeriveContext {
     enum_types: HashMap<String, EnumType>,
     input_types: HashMap<String, InputObjectType>,
+    interface_types: HashMap<String, InterfaceType>,
     object_types: HashMap<String, ObjectType>,
     scalar_types: HashSet<String>,
+    union_types: HashMap<String, UnionType>,
 }
 
 impl DeriveContext {
@@ -33,12 +35,16 @@ impl DeriveContext {
         let object_types = HashMap::new();
         let input_types = HashMap::new();
         let enum_types = HashMap::new();
+        let union_types = HashMap::new();
+        let interface_types = HashMap::new();
 
         DeriveContext {
             enum_types,
             input_types,
+            interface_types,
             object_types,
             scalar_types,
+            union_types,
         }
     }
 
@@ -61,6 +67,15 @@ impl DeriveContext {
 
     pub fn is_scalar(&self, type_name: &str) -> bool {
         self.scalar_types.contains(type_name)
+    }
+
+    pub fn insert_union(&mut self, union_type: UnionType) {
+        self.union_types.insert(union_type.name.clone(), union_type);
+    }
+
+    pub fn insert_interface(&mut self, interface_type: InterfaceType) {
+        self.interface_types
+            .insert(interface_type.name.clone(), interface_type);
     }
 }
 
@@ -147,8 +162,14 @@ fn gql_document_to_rs(
                     context.insert_scalar(scalar_type.name.to_string());
                     quote!()
                 }
-                TypeDefinition::Union(ref union_type) => gql_union_to_rs(union_type, &context),
-                TypeDefinition::Interface(_) => unimplemented!(),
+                TypeDefinition::Union(ref union_type) => {
+                    context.insert_union(union_type.clone());
+                    gql_union_to_rs(union_type, &context)
+                }
+                TypeDefinition::Interface(interface_type) => {
+                    context.insert_interface(interface_type.clone());
+                    quote!()
+                }
             },
             Definition::DirectiveDefinition(_) => unimplemented!(),
             Definition::SchemaDefinition(schema_definition) => {
@@ -295,17 +316,6 @@ fn gql_type_to_rs(
             #(#field_names),*
         }
     )
-    // impl ::tokio_gql::FromQueryField for #struct_name {
-    //     type Arguments = (#(#arguments),)
-
-    //     fn from_query_field(field: ::tokio_gql::query::Field) -> Result<Self, ::tokio_gql::QueryValidationError> {
-    //         if field.name != #struct_name_lit {
-    //             return Err(::tokio_gql::QueryValidationError::InvalidField { got: field.name.clone(), expected: #struct_name_lit })
-    //         }
-
-    //         let args = <Self::Arguments as tokio_gql::FromQueryArguments>::from_arguments()?;
-    //     }
-    // }
 }
 
 fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {

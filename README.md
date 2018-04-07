@@ -105,6 +105,8 @@ The two query directives required by the spec are implemented.
 
 In addition, `@deprecated`.
 
+TODO: inject supported directives as definitions inside the schema string constant in the generated code.
+
 ## Features
 
 * Schema and query languages
