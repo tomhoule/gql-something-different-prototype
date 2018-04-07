@@ -17,3 +17,8 @@ struct Query {
 ```
 
 ## How to test this
+
+## Inspirations
+
+* Sangria
+* Apollo

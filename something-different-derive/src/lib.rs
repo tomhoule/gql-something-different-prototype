@@ -8,8 +8,8 @@ extern crate quote;
 use std::fs::File;
 use std::io::prelude::*;
 
-use proc_macro::TokenStream;
 use heck::*;
+use proc_macro::TokenStream;
 
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
 pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenStream {
@@ -20,7 +20,6 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
 }
 
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
-
     let schema_path = extract_path(&ast.attrs).expect("path not specified");
     let cargo_manifest_dir =
         ::std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env variable is defined");
@@ -67,14 +66,12 @@ fn gql_document_to_rs(document: &graphql_parser::schema::Document) -> quote::Tok
     let mut definitions: Vec<quote::Tokens> = Vec::with_capacity(document.definitions.len());
     for definition in document.definitions.iter() {
         let tokens = match definition {
-            Definition::TypeDefinition(ref type_def) => {
-                match type_def {
-                    TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type),
-                    TypeDefinition::Enum(ref enum_type) => gql_enum_to_rs(enum_type),
-                    _ => unimplemented!(),
-                }
+            Definition::TypeDefinition(ref type_def) => match type_def {
+                TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type),
+                TypeDefinition::Enum(ref enum_type) => gql_enum_to_rs(enum_type),
+                _ => unimplemented!(),
             },
-            _ => unimplemented!()
+            _ => unimplemented!(),
         };
         definitions.push(tokens);
     }
@@ -83,7 +80,11 @@ fn gql_document_to_rs(document: &graphql_parser::schema::Document) -> quote::Tok
 
 fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens {
     let name: syn::Ident = enum_type.name.as_str().into();
-    let values: Vec<syn::Ident> = enum_type.values.iter().map(|v| v.name.to_camel_case().into()).collect();
+    let values: Vec<syn::Ident> = enum_type
+        .values
+        .iter()
+        .map(|v| v.name.to_camel_case().into())
+        .collect();
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = enum_type.description {
         let str_literal: syn::Lit = doc_string.as_str().into();
         quote!(#[doc = #str_literal])
@@ -93,7 +94,7 @@ fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens
     quote!{
         #doc_attr
         pub enum #name {
-            #(#values),*
+            #(#values),* ,
         }
     }
 }
@@ -101,6 +102,7 @@ fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens
 fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::Tokens {
     let enum_name: syn::Ident = format!("{}Field", object_type.name).into();
     let struct_name: syn::Ident = object_type.name.as_str().into();
+    // let struct_name_lit: syn::Lit = object_type.name.as_str().into();
     let field_names: Vec<quote::Tokens> = object_type
         .fields
         .iter()
@@ -137,7 +139,19 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
         pub struct #struct_name {
             selected_fields: Vec<#enum_name>,
         }
+
     )
+    // impl ::tokio_gql::FromQueryField for #struct_name {
+    //     type Arguments = (#(#arguments),)
+
+    //     fn from_query_field(field: ::tokio_gql::query::Field) -> Result<Self, ::tokio_gql::QueryValidationError> {
+    //         if field.name != #struct_name_lit {
+    //             return Err(::tokio_gql::QueryValidationError::InvalidField { got: field.name.clone(), expected: #struct_name_lit })
+    //         }
+
+    //         let args = <Self::Arguments as tokio_gql::FromQueryArguments>::from_arguments()?;
+    //     }
+    // }
 }
 
 fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {
@@ -237,7 +251,14 @@ mod tests {
         }
         "##;
         let parsed = parse_schema(gql).unwrap();
-        assert_eq!(gql_document_to_rs(&parsed), quote!(pub enum Dog { Golden, Chihuahua, Corgi }))
+        assert_eq!(
+            gql_document_to_rs(&parsed),
+            quote!(pub enum Dog {
+                Golden,
+                Chihuahua,
+                Corgi,
+            })
+        )
     }
 
     #[test]
@@ -254,7 +275,15 @@ mod tests {
         }
         "##;
         let parsed = parse_schema(gql).unwrap();
-        assert_eq!(gql_document_to_rs(&parsed), quote!(#[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"] pub enum BreadKind { White, FullGrain }))
-
+        assert_eq!(
+            gql_document_to_rs(&parsed),
+            quote!(
+                #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
+                pub enum BreadKind {
+                    White,
+                    FullGrain,
+                }
+            )
+        )
     }
 }
