@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use proc_macro::TokenStream;
+use heck::*;
 
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
 pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenStream {
@@ -30,16 +31,13 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     file.read_to_string(&mut the_schema_string).unwrap();
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let the_schema = syn::Lit::from(the_schema_string);
-
-    let object_types = extract_object_types(&parsed_schema);
-    let object_types: Vec<quote::Tokens> =
-        object_types.iter().map(|ty| gql_type_to_rs(ty)).collect();
+    let definitions = gql_document_to_rs(&parsed_schema);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #the_schema;
 
 
-        #(#object_types)*
+        #definitions
     }
 }
 
@@ -61,6 +59,43 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
         }
     }
     None
+}
+
+fn gql_document_to_rs(document: &graphql_parser::schema::Document) -> quote::Tokens {
+    use graphql_parser::schema::*;
+
+    let mut definitions: Vec<quote::Tokens> = Vec::with_capacity(document.definitions.len());
+    for definition in document.definitions.iter() {
+        let tokens = match definition {
+            Definition::TypeDefinition(ref type_def) => {
+                match type_def {
+                    TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type),
+                    TypeDefinition::Enum(ref enum_type) => gql_enum_to_rs(enum_type),
+                    _ => unimplemented!(),
+                }
+            },
+            _ => unimplemented!()
+        };
+        definitions.push(tokens);
+    }
+    quote!(#(#definitions)*)
+}
+
+fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens {
+    let name: syn::Ident = enum_type.name.as_str().into();
+    let values: Vec<syn::Ident> = enum_type.values.iter().map(|v| v.name.to_camel_case().into()).collect();
+    let doc_attr: quote::Tokens = if let Some(ref doc_string) = enum_type.description {
+        let str_literal: syn::Lit = doc_string.as_str().into();
+        quote!(#[doc = #str_literal])
+    } else {
+        quote!()
+    };
+    quote!{
+        #doc_attr
+        pub enum #name {
+            #(#values),*
+        }
+    }
 }
 
 fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::Tokens {
@@ -95,39 +130,6 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
             selected_fields: Vec<#enum_name>,
         }
     )
-}
-
-// fn extract_query(
-//     document: &graphql_parser::schema::Document,
-// ) -> Option<&graphql_parser::schema::ObjectType> {
-//     use graphql_parser::schema::*;
-
-//     for definition in document.definitions.iter() {
-//         if let Definition::TypeDefinition(TypeDefinition::Object(obj)) = definition {
-//             if obj.name == "Query" {
-//                 return Some(obj);
-//             }
-//         }
-//     }
-//     None
-// }
-
-fn extract_object_types(
-    document: &graphql_parser::schema::Document,
-) -> Vec<&graphql_parser::schema::ObjectType> {
-    use graphql_parser::schema::*;
-
-    document
-        .definitions
-        .iter()
-        .filter_map(|def| {
-            if let Definition::TypeDefinition(TypeDefinition::Object(obj)) = def {
-                Some(obj)
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {
@@ -167,20 +169,7 @@ mod tests {
         "#;
         let parsed = parse_schema(gql).unwrap();
         assert_eq!(
-            gql_type_to_rs(
-                parsed
-                    .definitions
-                    .iter()
-                    .filter_map(|d| {
-                        if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
-                            Some(ty)
-                        } else {
-                            None
-                        }
-                    })
-                    .next()
-                    .unwrap()
-            ),
+            gql_document_to_rs(&parsed),
             quote!{
                 pub enum PastaField { shape, ingredients }
                 pub struct Pasta { selected_fields: Vec<PastaField>, }
@@ -198,24 +187,42 @@ mod tests {
         "#;
         let parsed = parse_schema(gql).unwrap();
         assert_eq!(
-            gql_type_to_rs(
-                parsed
-                    .definitions
-                    .iter()
-                    .filter_map(|d| {
-                        if let Definition::TypeDefinition(TypeDefinition::Object(ty)) = d {
-                            Some(ty)
-                        } else {
-                            None
-                        }
-                    })
-                    .next()
-                    .unwrap()
-            ),
+            gql_document_to_rs(&parsed),
             quote!{
                 pub enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
                 pub struct Pasta { selected_fields: Vec<PastaField>, }
             }
         )
+    }
+
+    #[test]
+    fn enum_derive() {
+        let gql = r##"
+        enum Dog {
+            GOLDEN
+            CHIHUAHUA
+            CORGI
+        }
+        "##;
+        let parsed = parse_schema(gql).unwrap();
+        assert_eq!(gql_document_to_rs(&parsed), quote!(pub enum Dog { Golden, Chihuahua, Corgi }))
+    }
+
+    #[test]
+    fn enum_derive_with_docs() {
+        let gql = r##"
+        """
+        The bread kinds supported by this app.
+
+        [Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.
+        """
+        enum BreadKind {
+            WHITE
+            FULL_GRAIN
+        }
+        "##;
+        let parsed = parse_schema(gql).unwrap();
+        assert_eq!(gql_document_to_rs(&parsed), quote!(#[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"] pub enum BreadKind { White, FullGrain }))
+
     }
 }
