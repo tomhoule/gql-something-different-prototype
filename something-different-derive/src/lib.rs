@@ -8,7 +8,7 @@ extern crate quote;
 use std::fs::File;
 use std::io::prelude::*;
 
-use graphql_parser::schema::{EnumType, InputObjectType, ObjectType};
+use graphql_parser::schema::{EnumType, InputObjectType, ObjectType, UnionType};
 use heck::*;
 use proc_macro::TokenStream;
 use std::collections::{HashMap, HashSet};
@@ -147,8 +147,8 @@ fn gql_document_to_rs(
                     context.insert_scalar(scalar_type.name.to_string());
                     quote!()
                 }
+                TypeDefinition::Union(ref union_type) => gql_union_to_rs(union_type, &context),
                 TypeDefinition::Interface(_) => unimplemented!(),
-                TypeDefinition::Union(_) => unimplemented!(),
             },
             Definition::DirectiveDefinition(_) => unimplemented!(),
             Definition::SchemaDefinition(schema_definition) => {
@@ -179,6 +179,20 @@ fn gql_document_to_rs(
         definitions.push(tokens);
     }
     quote!(#(#definitions)*)
+}
+
+fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::Tokens {
+    let name: syn::Ident = union_type.name.as_str().into();
+    let united_types = union_type.types.iter().map(|ty| {
+        let ident: syn::Ident = format!("on{}", ty.as_str()).into();
+        let selection_type: syn::Ident = ty.as_str().into();
+        quote!(#ident(Vec<#selection_type>))
+    });
+    quote! {
+        pub enum #name {
+            #(#united_types),*
+        }
+    }
 }
 
 fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> quote::Tokens {
@@ -497,6 +511,21 @@ mod tests {
                     query: MyQuery,
                     mutation: AMutation,
                     subscription: TheSubscription,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unions() {
+        assert_expands_to! {
+            r##"
+            union SearchResult = Human | Droid | Starship
+            "## => {
+                pub enum SearchResult {
+                    onHuman(Vec<Human>),
+                    onDroid(Vec<Droid>),
+                    onStarship(Vec<Starship>)
                 }
             }
         }
