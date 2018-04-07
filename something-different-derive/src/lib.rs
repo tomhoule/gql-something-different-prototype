@@ -20,22 +20,22 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
 }
 
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
+
     let schema_path = extract_path(&ast.attrs).expect("path not specified");
     let cargo_manifest_dir =
         ::std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env variable is defined");
     // We need to qualify the schema with the path to the crate it is part of
     let schema_path = format!("{}/{}", cargo_manifest_dir, schema_path);
-    // panic!("schema_path: {}", schema_path,);
     let mut file = File::open(schema_path).expect("File not found");
     let mut the_schema_string = String::new();
     file.read_to_string(&mut the_schema_string).unwrap();
+
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
-    let the_schema = syn::Lit::from(the_schema_string);
+    let schema_as_string_literal = syn::Lit::from(the_schema_string);
     let definitions = gql_document_to_rs(&parsed_schema);
 
     quote! {
-        pub const THE_SCHEMA: &'static str = #the_schema;
-
+        pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
         #definitions
     }
@@ -121,11 +121,19 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
             }
         })
         .collect();
+    let doc_attr: quote::Tokens = if let Some(ref doc_string) = object_type.description {
+        let str_literal: syn::Lit = doc_string.as_str().into();
+        quote!(#[doc = #str_literal])
+    } else {
+        quote!()
+    };
+
     quote!(
         pub enum #enum_name {
             #(#field_names),*
         }
 
+        #doc_attr
         pub struct #struct_name {
             selected_fields: Vec<#enum_name>,
         }
@@ -191,6 +199,30 @@ mod tests {
             quote!{
                 pub enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
                 pub struct Pasta { selected_fields: Vec<PastaField>, }
+            }
+        )
+    }
+
+    #[test]
+    fn object_derive_with_description_string() {
+        let gql = r##"
+        """
+        Represents a point on the plane.
+        """
+        type Point {
+            x: Int!
+            y: Int!
+        }
+        "##;
+
+        let parsed = parse_schema(gql).unwrap();
+        let expanded = gql_document_to_rs(&parsed);
+        assert_eq!(
+            expanded,
+            quote!{
+                pub enum PointField { x, y }
+                #[doc = "Represents a point on the plane.\n"]
+                pub struct Point { selected_fields: Vec<PointField>, }
             }
         )
     }
