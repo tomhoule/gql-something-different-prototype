@@ -108,18 +108,22 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
         .iter()
         .map(|f| {
             let ident: syn::Ident = f.name.clone().into();
-            if f.arguments.is_empty() {
-                quote!(#ident)
+            let args: Vec<quote::Tokens> = f.arguments
+                .iter()
+                .map(|arg| {
+                    let field_name: syn::Ident = arg.name.clone().into();
+                    let field_type = gql_type_to_json_type(&arg.value_type);
+                    quote!( #field_name: #field_type )
+                })
+                .collect();
+            let sub_field_set: Option<syn::Ident> =
+                Some(format!("{}Field", f.field_type).to_camel_case().into());
+            let sub_field_set: Option<quote::Tokens> =
+                sub_field_set.map(|set| quote!{ field_set: Vec<#set>, });
+            if sub_field_set.is_some() || !args.is_empty() {
+                quote!{#ident { #sub_field_set #(#args),* }}
             } else {
-                let args: Vec<quote::Tokens> = f.arguments
-                    .iter()
-                    .map(|arg| {
-                        let field_name: syn::Ident = arg.name.clone().into();
-                        let field_type = gql_type_to_json_type(&arg.value_type);
-                        quote!( #field_name: #field_type )
-                    })
-                    .collect();
-                quote!{#ident { #(#args),* }}
+                quote!(#ident)
             }
         })
         .collect();
@@ -237,6 +241,51 @@ mod tests {
                 pub enum PointField { x, y }
                 #[doc = "Represents a point on the plane.\n"]
                 pub struct Point { selected_fields: Vec<PointField>, }
+            }
+        )
+    }
+
+    #[test]
+    fn object_derive_with_nested_field() {
+        let gql = r##"
+        type Dessert {
+            name: String!
+            contains_chocolate: Boolean
+        }
+
+        type Cheese {
+            name: String!
+            blue: Boolean
+        }
+
+        type Meal {
+            main_course: String!
+            cheese(vegan: Boolean): Cheese
+            dessert: Dessert!
+        }
+        "##;
+
+        let parsed = parse_schema(gql).unwrap();
+        let expanded = gql_document_to_rs(&parsed);
+
+        assert_eq!(
+            expanded,
+            quote!{
+                enum DessertField {
+                    Name,
+                    ContainsChocolate,
+                }
+
+                enum CheeseField {
+                    Name,
+                    Blue,
+                }
+
+                enum MealField {
+                    MainCourse,
+                    Cheese ,
+                    Dessert,
+                }
             }
         )
     }
