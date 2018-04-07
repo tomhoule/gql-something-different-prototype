@@ -8,11 +8,15 @@ extern crate quote;
 use std::fs::File;
 use std::io::prelude::*;
 
+use graphql_parser::schema::{EnumType, InputObjectType, ObjectType};
 use heck::*;
 use proc_macro::TokenStream;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 struct DeriveContext {
+    enum_types: HashMap<String, EnumType>,
+    input_types: HashMap<String, InputObjectType>,
+    object_types: HashMap<String, ObjectType>,
     scalar_types: HashSet<String>,
 }
 
@@ -26,7 +30,29 @@ impl DeriveContext {
         scalar_types.insert("String".to_string());
         scalar_types.insert("Boolean".to_string());
 
-        DeriveContext { scalar_types }
+        let object_types = HashMap::new();
+        let input_types = HashMap::new();
+        let enum_types = HashMap::new();
+
+        DeriveContext {
+            enum_types,
+            input_types,
+            object_types,
+            scalar_types,
+        }
+    }
+
+    pub fn insert_object(&mut self, object_type: ObjectType) {
+        self.object_types
+            .insert(object_type.name.clone(), object_type);
+    }
+
+    pub fn insert_enum(&mut self, enum_type: EnumType) {
+        self.enum_types.insert(enum_type.name.clone(), enum_type);
+    }
+
+    pub fn insert_input_type(&mut self, input_type: InputObjectType) {
+        self.input_types.insert(input_type.name.clone(), input_type);
     }
 
     pub fn insert_scalar(&mut self, scalar_type: String) {
@@ -98,8 +124,18 @@ fn gql_document_to_rs(
     for definition in document.definitions.iter() {
         let tokens = match definition {
             Definition::TypeDefinition(ref type_def) => match type_def {
-                TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type, &context),
-                TypeDefinition::Enum(ref enum_type) => gql_enum_to_rs(enum_type),
+                TypeDefinition::Object(ref object_type) => {
+                    context.insert_object(object_type.clone());
+                    gql_type_to_rs(object_type, &context)
+                }
+                TypeDefinition::Enum(ref enum_type) => {
+                    context.insert_enum(enum_type.clone());
+                    gql_enum_to_rs(enum_type)
+                }
+                TypeDefinition::InputObject(ref input_object_type) => {
+                    context.insert_input_type(input_object_type.clone());
+                    gql_input_to_rs(input_object_type, &context)
+                }
                 TypeDefinition::Scalar(ref scalar_type) => {
                     context.insert_scalar(scalar_type.name.to_string());
                     quote!()
@@ -111,6 +147,28 @@ fn gql_document_to_rs(
         definitions.push(tokens);
     }
     quote!(#(#definitions)*)
+}
+
+fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> quote::Tokens {
+    let name: syn::Ident = input_type.name.as_str().into();
+    let values: Vec<syn::Ident> = input_type
+        .fields
+        .iter()
+        .map(|v| v.name.to_camel_case().into())
+        .collect();
+    let doc_attr: quote::Tokens = if let Some(ref doc_string) = input_type.description {
+        let str_literal: syn::Lit = doc_string.as_str().into();
+        quote!(#[doc = #str_literal])
+    } else {
+        quote!()
+    };
+
+    quote!{
+        #doc_attr
+        pub enum #name {
+            #(#values),* ,
+        }
+    }
 }
 
 fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens {
@@ -363,6 +421,31 @@ mod tests {
                 pub enum BreadKind {
                     White,
                     FullGrain,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn simple_input_object_derive() {
+        assert_expands_to! {
+            r##"
+            """
+            A point in 2, 3 or 4 dimensions, because why not?
+            """
+            input Point {
+                X: Int!
+                Y: Int!
+                Z: Int!
+                ZZ: Int!
+            }
+            "## => {
+                #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
+                pub enum Point {
+                    X,
+                    Y,
+                    Z,
+                    Zz,
                 }
             }
         }
