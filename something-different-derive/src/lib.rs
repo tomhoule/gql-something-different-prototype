@@ -10,6 +10,33 @@ use std::io::prelude::*;
 
 use heck::*;
 use proc_macro::TokenStream;
+use std::collections::HashSet;
+
+struct DeriveContext {
+    scalar_types: HashSet<String>,
+}
+
+impl DeriveContext {
+    pub fn new() -> DeriveContext {
+        let mut scalar_types = HashSet::new();
+
+        // See https://graphql.org/learn/schema/#scalar-types
+        scalar_types.insert("Int".to_string());
+        scalar_types.insert("Float".to_string());
+        scalar_types.insert("String".to_string());
+        scalar_types.insert("Boolean".to_string());
+
+        DeriveContext { scalar_types }
+    }
+
+    pub fn insert_scalar(&mut self, scalar_type: String) {
+        self.scalar_types.insert(scalar_type);
+    }
+
+    pub fn is_scalar(&self, type_name: &str) -> bool {
+        self.scalar_types.contains(type_name)
+    }
+}
 
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
 pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenStream {
@@ -31,7 +58,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
 
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let schema_as_string_literal = syn::Lit::from(the_schema_string);
-    let definitions = gql_document_to_rs(&parsed_schema);
+    let context = DeriveContext::new();
+    let definitions = gql_document_to_rs(&parsed_schema, context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
@@ -60,15 +88,22 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
     None
 }
 
-fn gql_document_to_rs(document: &graphql_parser::schema::Document) -> quote::Tokens {
+fn gql_document_to_rs(
+    document: &graphql_parser::schema::Document,
+    mut context: DeriveContext,
+) -> quote::Tokens {
     use graphql_parser::schema::*;
 
     let mut definitions: Vec<quote::Tokens> = Vec::with_capacity(document.definitions.len());
     for definition in document.definitions.iter() {
         let tokens = match definition {
             Definition::TypeDefinition(ref type_def) => match type_def {
-                TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type),
+                TypeDefinition::Object(ref object_type) => gql_type_to_rs(object_type, &context),
                 TypeDefinition::Enum(ref enum_type) => gql_enum_to_rs(enum_type),
+                TypeDefinition::Scalar(ref scalar_type) => {
+                    context.insert_scalar(scalar_type.name.to_string());
+                    quote!()
+                }
                 _ => unimplemented!(),
             },
             _ => unimplemented!(),
@@ -99,27 +134,43 @@ fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens
     }
 }
 
-fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::Tokens {
-    let enum_name: syn::Ident = format!("{}Field", object_type.name).into();
-    let struct_name: syn::Ident = object_type.name.as_str().into();
+fn extract_inner_name(ty: &graphql_parser::query::Type) -> &str {
+    use graphql_parser::query::Type::*;
+
+    match ty {
+        NamedType(name) => name,
+        ListType(inner) => extract_inner_name(inner),
+        NonNullType(inner) => extract_inner_name(inner),
+    }
+}
+
+fn gql_type_to_rs(
+    object_type: &graphql_parser::schema::ObjectType,
+    context: &DeriveContext,
+) -> quote::Tokens {
+    let name: syn::Ident = object_type.name.as_str().into();
     // let struct_name_lit: syn::Lit = object_type.name.as_str().into();
     let field_names: Vec<quote::Tokens> = object_type
         .fields
         .iter()
         .map(|f| {
-            let ident: syn::Ident = f.name.clone().into();
+            let ident: syn::Ident = f.name.to_camel_case().into();
             let args: Vec<quote::Tokens> = f.arguments
                 .iter()
                 .map(|arg| {
-                    let field_name: syn::Ident = arg.name.clone().into();
+                    let field_name: syn::Ident = arg.name.to_mixed_case().into();
                     let field_type = gql_type_to_json_type(&arg.value_type);
                     quote!( #field_name: #field_type )
                 })
                 .collect();
-            let sub_field_set: Option<syn::Ident> =
-                Some(format!("{}Field", f.field_type).to_camel_case().into());
+            let field_type_name = extract_inner_name(&f.field_type);
+            let sub_field_set: Option<syn::Ident> = if context.is_scalar(field_type_name) {
+                None
+            } else {
+                Some(field_type_name.to_camel_case().into())
+            };
             let sub_field_set: Option<quote::Tokens> =
-                sub_field_set.map(|set| quote!{ field_set: Vec<#set>, });
+                sub_field_set.map(|set| quote!{ selection: Vec<#set>, });
             if sub_field_set.is_some() || !args.is_empty() {
                 quote!{#ident { #sub_field_set #(#args),* }}
             } else {
@@ -135,15 +186,10 @@ fn gql_type_to_rs(object_type: &graphql_parser::schema::ObjectType) -> quote::To
     };
 
     quote!(
-        pub enum #enum_name {
+        #doc_attr
+        pub enum #name {
             #(#field_names),*
         }
-
-        #doc_attr
-        pub struct #struct_name {
-            selected_fields: Vec<#enum_name>,
-        }
-
     )
     // impl ::tokio_gql::FromQueryField for #struct_name {
     //     type Arguments = (#(#arguments),)
@@ -185,154 +231,140 @@ mod tests {
     use super::*;
     use graphql_parser::schema::*;
 
+    macro_rules! assert_expands_to {
+        ($gql_string:expr => $expanded:tt) => {
+            let gql = $gql_string;
+            let parsed = parse_schema(gql).unwrap();
+            let got = gql_document_to_rs(&parsed, DeriveContext::new());
+            let expected = quote! $expanded ;
+            assert_eq!(expected, got);
+        };
+    }
+
     #[test]
     fn basic_object_derive() {
-        let gql = r#"
-        type Pasta {
-            shape: String!
-            ingredients: [String!]!
-        }
-        "#;
-        let parsed = parse_schema(gql).unwrap();
-        assert_eq!(
-            gql_document_to_rs(&parsed),
-            quote!{
-                pub enum PastaField { shape, ingredients }
-                pub struct Pasta { selected_fields: Vec<PastaField>, }
+        assert_expands_to! {
+            r#"
+            type Pasta {
+                shape: String!
+                ingredients: [String!]!
             }
-        )
+            "# => {
+                pub enum Pasta { Shape, Ingredients }
+            }
+        }
     }
 
     #[test]
     fn object_derive_with_scalar_input() {
-        let gql = r#"
-        type Pasta {
-            shape(strict: Boolean): String!
-            ingredients(filter: String!): [String!]!
-        }
-        "#;
-        let parsed = parse_schema(gql).unwrap();
-        assert_eq!(
-            gql_document_to_rs(&parsed),
-            quote!{
-                pub enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
-                pub struct Pasta { selected_fields: Vec<PastaField>, }
+        assert_expands_to! {
+            r#"
+            type Pasta {
+                shape(strict: Boolean): String!
+                ingredients(filter: String!): [String!]!
             }
-        )
+            "# => {
+                pub enum Pasta { Shape { strict: Option<bool> }, Ingredients { filter: Option<String> } }
+            }
+        }
     }
 
     #[test]
     fn object_derive_with_description_string() {
-        let gql = r##"
-        """
-        Represents a point on the plane.
-        """
-        type Point {
-            x: Int!
-            y: Int!
-        }
-        "##;
-
-        let parsed = parse_schema(gql).unwrap();
-        let expanded = gql_document_to_rs(&parsed);
-        assert_eq!(
-            expanded,
-            quote!{
-                pub enum PointField { x, y }
-                #[doc = "Represents a point on the plane.\n"]
-                pub struct Point { selected_fields: Vec<PointField>, }
+        assert_expands_to!{
+            r##"
+            """
+            Represents a point on the plane.
+            """
+            type Point {
+                x: Int!
+                y: Int!
             }
-        )
+            "## => {
+                #[doc = "Represents a point on the plane.\n"]
+                pub enum Point { X, Y }
+            }
+        }
     }
 
     #[test]
     fn object_derive_with_nested_field() {
-        let gql = r##"
-        type Dessert {
-            name: String!
-            contains_chocolate: Boolean
-        }
-
-        type Cheese {
-            name: String!
-            blue: Boolean
-        }
-
-        type Meal {
-            main_course: String!
-            cheese(vegan: Boolean): Cheese
-            dessert: Dessert!
-        }
-        "##;
-
-        let parsed = parse_schema(gql).unwrap();
-        let expanded = gql_document_to_rs(&parsed);
-
-        assert_eq!(
-            expanded,
-            quote!{
-                enum DessertField {
-                    Name,
-                    ContainsChocolate,
+        assert_expands_to! {
+            r##"
+                type DessertDescriptor {
+                    name: String!
+                    contains_chocolate: Boolean
                 }
 
-                enum CheeseField {
-                    Name,
-                    Blue,
+                type Cheese {
+                    name: String!
+                    blue: Boolean
                 }
 
-                enum MealField {
+                type Meal {
+                    main_course: String!
+                    cheese(vegan: Boolean): Cheese
+                    dessert: DessertDescriptor!
+                }
+            "## => {
+                pub enum DessertDescriptor {
+                    Name,
+                    ContainsChocolate
+                }
+
+                pub enum Cheese {
+                    Name,
+                    Blue
+                }
+
+                pub enum Meal {
                     MainCourse,
-                    Cheese ,
-                    Dessert,
+                    Cheese { selection: Vec<Cheese>, vegan: Option<bool> },
+                    Dessert { selection: Vec<DessertDescriptor>, }
                 }
             }
-        )
+        }
     }
 
     #[test]
     fn enum_derive() {
-        let gql = r##"
-        enum Dog {
-            GOLDEN
-            CHIHUAHUA
-            CORGI
+        assert_expands_to! {
+            r##"
+            enum Dog {
+                GOLDEN
+                CHIHUAHUA
+                CORGI
+            }
+            "## => {
+                pub enum Dog {
+                    Golden,
+                    Chihuahua,
+                    Corgi,
+                }
+            }
         }
-        "##;
-        let parsed = parse_schema(gql).unwrap();
-        assert_eq!(
-            gql_document_to_rs(&parsed),
-            quote!(pub enum Dog {
-                Golden,
-                Chihuahua,
-                Corgi,
-            })
-        )
     }
 
     #[test]
     fn enum_derive_with_docs() {
-        let gql = r##"
-        """
-        The bread kinds supported by this app.
+        assert_expands_to! {
+            r##"
+            """
+            The bread kinds supported by this app.
 
-        [Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.
-        """
-        enum BreadKind {
-            WHITE
-            FULL_GRAIN
-        }
-        "##;
-        let parsed = parse_schema(gql).unwrap();
-        assert_eq!(
-            gql_document_to_rs(&parsed),
-            quote!(
+            [Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.
+            """
+            enum BreadKind {
+                WHITE
+                FULL_GRAIN
+            }
+            "## => {
                 #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
                 pub enum BreadKind {
                     White,
                     FullGrain,
                 }
-            )
-        )
+            }
+        }
     }
 }
