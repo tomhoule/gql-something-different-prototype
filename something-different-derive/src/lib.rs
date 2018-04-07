@@ -8,7 +8,8 @@ extern crate quote;
 use std::fs::File;
 use std::io::prelude::*;
 
-use graphql_parser::schema::{EnumType, InputObjectType, InterfaceType, ObjectType, UnionType};
+use graphql_parser::schema::{EnumType, InputObjectType, InterfaceType, ObjectType,
+                             SchemaDefinition, UnionType};
 use heck::*;
 use proc_macro::TokenStream;
 use std::collections::{HashMap, HashSet};
@@ -17,9 +18,10 @@ struct DeriveContext {
     enum_types: HashMap<String, EnumType>,
     input_types: HashMap<String, InputObjectType>,
     interface_types: HashMap<String, InterfaceType>,
-    object_types: HashMap<String, ObjectType>,
+    object_types: Vec<ObjectType>,
     scalar_types: HashSet<String>,
     union_types: HashMap<String, UnionType>,
+    schema_type: Option<SchemaDefinition>,
 }
 
 impl DeriveContext {
@@ -32,7 +34,7 @@ impl DeriveContext {
         scalar_types.insert("String".to_string());
         scalar_types.insert("Boolean".to_string());
 
-        let object_types = HashMap::new();
+        let object_types = Vec::new();
         let input_types = HashMap::new();
         let enum_types = HashMap::new();
         let union_types = HashMap::new();
@@ -44,13 +46,13 @@ impl DeriveContext {
             interface_types,
             object_types,
             scalar_types,
+            schema_type: None,
             union_types,
         }
     }
 
     pub fn insert_object(&mut self, object_type: ObjectType) {
-        self.object_types
-            .insert(object_type.name.clone(), object_type);
+        self.object_types.push(object_type);
     }
 
     pub fn insert_enum(&mut self, enum_type: EnumType) {
@@ -100,13 +102,15 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let schema_as_string_literal = syn::Lit::from(the_schema_string);
     let mut context = DeriveContext::new();
-    let definitions = gql_document_to_rs(&parsed_schema, &mut context);
+    extract_definitions(&parsed_schema, &mut context);
+    let mut definitions = Vec::new();
+    gql_document_to_rs(&mut definitions, &context);
     let extractor_impls = extractor_impls(&context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
-        #definitions
+        #(definitions)*
 
         #(#extractor_impls)*
     }
@@ -136,70 +140,84 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
     None
 }
 
-fn gql_document_to_rs(
-    document: &graphql_parser::schema::Document,
-    context: &mut DeriveContext,
-) -> quote::Tokens {
+fn extract_definitions(document: &graphql_parser::schema::Document, context: &mut DeriveContext) {
     use graphql_parser::schema::*;
 
-    let mut definitions: Vec<quote::Tokens> = Vec::with_capacity(document.definitions.len());
     for definition in document.definitions.iter() {
-        let tokens = match definition {
+        match definition {
             Definition::TypeDefinition(ref type_def) => match type_def {
                 TypeDefinition::Object(ref object_type) => {
                     context.insert_object(object_type.clone());
-                    gql_type_to_rs(object_type, &context)
                 }
                 TypeDefinition::Enum(ref enum_type) => {
                     context.insert_enum(enum_type.clone());
-                    gql_enum_to_rs(enum_type)
                 }
                 TypeDefinition::InputObject(ref input_object_type) => {
                     context.insert_input_type(input_object_type.clone());
-                    gql_input_to_rs(input_object_type, &context)
                 }
                 TypeDefinition::Scalar(ref scalar_type) => {
                     context.insert_scalar(scalar_type.name.to_string());
-                    quote!()
                 }
                 TypeDefinition::Union(ref union_type) => {
                     context.insert_union(union_type.clone());
-                    gql_union_to_rs(union_type, &context)
                 }
                 TypeDefinition::Interface(interface_type) => {
                     context.insert_interface(interface_type.clone());
-                    quote!()
                 }
             },
             Definition::DirectiveDefinition(_) => unimplemented!(),
             Definition::SchemaDefinition(schema_definition) => {
-                let mut fields: Vec<quote::Tokens> = Vec::new();
-                if let Some(ref query) = schema_definition.query {
-                    let object_name: syn::Ident = query.as_str().into();
-                    fields.push(quote!(query: #object_name));
-                }
-
-                if let Some(ref mutation) = schema_definition.mutation {
-                    let object_name: syn::Ident = mutation.as_str().into();
-                    fields.push(quote!(mutation: #object_name));
-                }
-
-                if let Some(ref subscription) = schema_definition.subscription {
-                    let object_name: syn::Ident = subscription.as_str().into();
-                    fields.push(quote!(subscription: #object_name));
-                }
-
-                quote!{
-                pub struct Schema {
-                    #(#fields),*,
-                }
-                }
+                context.schema_type = Some(schema_definition.clone())
             }
             Definition::TypeExtension(_) => unimplemented!(),
         };
-        definitions.push(tokens);
     }
-    quote!(#(#definitions)*)
+}
+
+fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
+    for object in context.object_types.iter() {
+        buf.push(gql_type_to_rs(object, &context));
+    }
+
+    for enum_type in context.enum_types.values() {
+        buf.push(gql_enum_to_rs(enum_type));
+    }
+
+    for input_type in context.input_types.values() {
+        buf.push(gql_input_to_rs(input_type, &context));
+    }
+
+    for union_type in context.union_types.values() {
+        buf.push(gql_union_to_rs(union_type, &context));
+    }
+
+    for interface_type in context.interface_types.values() {
+        unimplemented!();
+    }
+
+    if let Some(ref schema_definition) = context.schema_type {
+        let mut fields: Vec<quote::Tokens> = Vec::new();
+        if let Some(ref query) = schema_definition.query {
+            let object_name: syn::Ident = query.as_str().into();
+            fields.push(quote!(query: #object_name));
+        }
+
+        if let Some(ref mutation) = schema_definition.mutation {
+            let object_name: syn::Ident = mutation.as_str().into();
+            fields.push(quote!(mutation: #object_name));
+        }
+
+        if let Some(ref subscription) = schema_definition.subscription {
+            let object_name: syn::Ident = subscription.as_str().into();
+            fields.push(quote!(subscription: #object_name));
+        }
+
+        buf.push(quote!{
+            pub struct Schema {
+                #(#fields),*,
+            }
+        })
+    }
 }
 
 fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::Tokens {
@@ -349,7 +367,11 @@ mod tests {
         ($gql_string:expr => $expanded:tt) => {
             let gql = $gql_string;
             let parsed = parse_schema(gql).unwrap();
-            let got = gql_document_to_rs(&parsed, &mut DeriveContext::new());
+            let mut buf = Vec::new();
+            let mut context = DeriveContext::new();
+            extract_definitions(&parsed, &mut context);
+            gql_document_to_rs(&mut buf, &context);
+            let got = quote!(#(#buf)*);
             let expected = quote! $expanded ;
             assert_eq!(expected, got);
         };
