@@ -1,6 +1,8 @@
 extern crate futures;
 extern crate serde_json as json;
 
+mod coercion;
+
 #[macro_use]
 extern crate something_different_derive;
 #[doc(hidden)]
