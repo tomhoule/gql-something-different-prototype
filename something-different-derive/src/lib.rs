@@ -182,8 +182,8 @@ mod tests {
                     .unwrap()
             ),
             quote!{
-                enum PastaField { shape, ingredients }
-                struct Pasta { selected_fields: Vec<PastaField>, }
+                pub enum PastaField { shape, ingredients }
+                pub struct Pasta { selected_fields: Vec<PastaField>, }
             }
         )
     }
@@ -213,8 +213,8 @@ mod tests {
                     .unwrap()
             ),
             quote!{
-                enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
-                struct Pasta { selected_fields: Vec<PastaField>, }
+                pub enum PastaField { shape { strict: Option<bool> }, ingredients { filter: Option<String> } }
+                pub struct Pasta { selected_fields: Vec<PastaField>, }
             }
         )
     }
