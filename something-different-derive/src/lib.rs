@@ -84,14 +84,21 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
 
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let schema_as_string_literal = syn::Lit::from(the_schema_string);
-    let context = DeriveContext::new();
-    let definitions = gql_document_to_rs(&parsed_schema, context);
+    let mut context = DeriveContext::new();
+    let definitions = gql_document_to_rs(&parsed_schema, &mut context);
+    let extractor_impls = extractor_impls(&context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
         #definitions
+
+        #(#extractor_impls)*
     }
+}
+
+fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
+    Vec::new()
 }
 
 fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
@@ -116,7 +123,7 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
 
 fn gql_document_to_rs(
     document: &graphql_parser::schema::Document,
-    mut context: DeriveContext,
+    context: &mut DeriveContext,
 ) -> quote::Tokens {
     use graphql_parser::schema::*;
 
@@ -140,9 +147,34 @@ fn gql_document_to_rs(
                     context.insert_scalar(scalar_type.name.to_string());
                     quote!()
                 }
-                _ => unimplemented!(),
+                TypeDefinition::Interface(_) => unimplemented!(),
+                TypeDefinition::Union(_) => unimplemented!(),
             },
-            _ => unimplemented!(),
+            Definition::DirectiveDefinition(_) => unimplemented!(),
+            Definition::SchemaDefinition(schema_definition) => {
+                let mut fields: Vec<quote::Tokens> = Vec::new();
+                if let Some(ref query) = schema_definition.query {
+                    let object_name: syn::Ident = query.as_str().into();
+                    fields.push(quote!(query: #object_name));
+                }
+
+                if let Some(ref mutation) = schema_definition.mutation {
+                    let object_name: syn::Ident = mutation.as_str().into();
+                    fields.push(quote!(mutation: #object_name));
+                }
+
+                if let Some(ref subscription) = schema_definition.subscription {
+                    let object_name: syn::Ident = subscription.as_str().into();
+                    fields.push(quote!(subscription: #object_name));
+                }
+
+                quote!{
+                pub struct Schema {
+                    #(#fields),*,
+                }
+                }
+            }
+            Definition::TypeExtension(_) => unimplemented!(),
         };
         definitions.push(tokens);
     }
@@ -293,7 +325,7 @@ mod tests {
         ($gql_string:expr => $expanded:tt) => {
             let gql = $gql_string;
             let parsed = parse_schema(gql).unwrap();
-            let got = gql_document_to_rs(&parsed, DeriveContext::new());
+            let got = gql_document_to_rs(&parsed, &mut DeriveContext::new());
             let expected = quote! $expanded ;
             assert_eq!(expected, got);
         };
@@ -446,6 +478,25 @@ mod tests {
                     Y,
                     Z,
                     Zz,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn schema_definition() {
+        assert_expands_to! {
+            r##"
+            schema {
+                query: MyQuery
+                mutation: AMutation
+                subscription: TheSubscription
+            }
+            "## => {
+                pub struct Schema {
+                    query: MyQuery,
+                    mutation: AMutation,
+                    subscription: TheSubscription,
                 }
             }
         }
