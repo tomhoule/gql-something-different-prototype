@@ -129,8 +129,15 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         let field_matchers = object_type.fields.iter().map(|field| {
             let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
+            let argument_idents: Vec<Term> = Vec::new();
+            let argument_literals: Vec<Literal> = Vec::new();
             quote! {
-                if field.name == #variant_name_literal { result.push(#name::#variant_name) }
+                if field.name == #variant_name_literal {
+                    #(
+                        let #argument_idents = field.arguments.find(|arg| arg.name == #argument_literals).unwrap();
+                    )
+                    result.push(#name::#variant_name { #(#argument_idents),* })
+                }
             }
         });
         let implementation = quote! {
@@ -166,6 +173,11 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     ));
 
     coerce_impls
+}
+
+struct FieldVariantDescriptor {
+    arguments: Vec<graphql_parser::schema::InputValue>,
+    field_type: Option<String>,
 }
 
 fn impl_schema_coerce(
