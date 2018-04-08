@@ -1,7 +1,9 @@
 extern crate futures;
+extern crate serde;
 extern crate serde_json as json;
 
 mod coercion;
+pub mod identifiable;
 
 #[macro_use]
 extern crate something_different_derive;
@@ -10,6 +12,7 @@ pub use something_different_derive::*;
 
 use futures::prelude::*;
 
+use serde::Serialize;
 use std::collections::HashMap;
 
 // Find the Query type
@@ -18,6 +21,7 @@ use std::collections::HashMap;
 extern crate graphql_parser;
 
 use graphql_parser::query;
+use identifiable::Identifiable;
 
 // Take an arbitrary error type as input to `refine_schema`
 
@@ -33,13 +37,56 @@ struct DataLoader<Identifier, Output, Error> {
     resolve: Fn(Vec<Identifier>) -> Box<Future<Item = Vec<Output>, Error = Error>>,
 }
 
-struct ResponseNode<Error> {
+pub struct ResponseNode<Error> {
     value: ResponseNodeValue<Error>,
-    children: HashMap<&'static str, ResponseNodeValue<Error>>,
+    prefix: Vec<String>,
 }
 
-struct ResponseBuilder<Error> {
+pub struct ResponseBuilder<Error> {
     tree: ResponseNode<Error>,
+}
+
+impl<Error> ResponseBuilder<Error> {
+    pub fn new() -> ResponseBuilder<Error> {
+        ResponseBuilder {
+            tree: ResponseNode {
+                prefix: Vec::new(),
+                value: ResponseNodeValue::Immediate(json::Value::Null),
+            },
+        }
+    }
+}
+
+impl<Error> ResponseNode<Error> {
+    /// Sets the current scope value to the `value` argument.
+    pub fn set<S: Serialize>(&mut self, value: S) {
+        self.value = ResponseNodeValue::Immediate(
+            json::to_value(value).expect("value can be converted to JSON"),
+        );
+    }
+
+    /// Sets `key` to `value` in the current scope. If the current scope is not an object. it becomes one with only that key-value.
+    pub fn set_kv<S: Serialize>(key: &str, value: S) {
+        // match self.value {
+        //   ResponseNodeValue::Immediate(json_value) => {
+        //      match json_value {
+        //        json::Value::Object(obj) => {
+        //           ...insert
+        //        }
+        //        _ => { self.value = ResponseNodeValue::Immediate(json!({ [key]: value })),
+        //
+        //      }
+        //   }
+        //   ResponseNodeValue::Deferred(deferred_value) => { unimplemented!() }
+        // }
+        //
+        unimplemented!();
+    }
+
+    /// Registers
+    pub fn set_deferred<'a, Resource: Identifiable>(ids: impl AsRef<&'a [&'a str]>) {
+        unimplemented!();
+    }
 }
 
 //
