@@ -3,10 +3,12 @@
 extern crate graphql_parser;
 extern crate heck;
 extern crate proc_macro;
+extern crate proc_macro2;
 extern crate syn;
 #[macro_use]
 extern crate quote;
 
+use proc_macro2::{Literal, Span, Term};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -89,7 +91,7 @@ pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenSt
     let s = input.to_string();
     let ast = syn::parse_derive_input(&s).unwrap();
     let gen = impl_something_different(&ast);
-    gen.parse().unwrap()
+    gen.into()
 }
 
 fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
@@ -103,7 +105,7 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     file.read_to_string(&mut the_schema_string).unwrap();
 
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
-    let schema_as_string_literal = syn::Lit::from(the_schema_string);
+    let schema_as_string_literal = Literal::string(&the_schema_string);
     let mut context = DeriveContext::new();
     extract_definitions(&parsed_schema, &mut context);
     let mut definitions = Vec::new();
@@ -123,9 +125,9 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     let mut coerce_impls = Vec::new();
 
     for object_type in context.object_types.iter() {
-        let name: syn::Ident = object_type.name.as_str().into();
+        let name = Term::new(&object_type.name, Span::call_site());
         let field_matchers = object_type.fields.iter().map(|field| {
-            let variant_name: syn::Ident = field.name.to_camel_case().into();
+            let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
             quote! {
                 if field.name == #variant_name_literal { result.push(#name::#variant_name) }
@@ -170,30 +172,30 @@ fn impl_schema_coerce(
     schema: &graphql_parser::schema::SchemaDefinition,
     _context: &DeriveContext,
 ) -> quote::Tokens {
-    let mut field_values: Vec<syn::Ident> = Vec::new();
-    let mut field_names: Vec<syn::Ident> = Vec::new();
+    let mut field_values: Vec<Term> = Vec::new();
+    let mut field_names: Vec<Term> = Vec::new();
 
     if let Some(ref name) = schema.query {
-        let name: syn::Ident = name.as_str().into();
+        let name = Term::new(name.as_str(), Span::call_site());
         field_values.push(name);
-        field_names.push("query".into());
+        field_names.push(Term::new("query", Span::call_site()));
     }
 
     if let Some(ref name) = schema.mutation {
-        let name: syn::Ident = name.as_str().into();
+        let name = Term::new(name.as_str(), Span::call_site());
         field_values.push(name);
-        field_names.push("mutation".into());
+        field_names.push(Term::new("mutation", Span::call_site()));
     }
 
     if let Some(ref name) = schema.subscription {
-        let name: syn::Ident = name.as_str().into();
+        let name = Term::new(name.as_str(), Span::call_site());
         field_values.push(name);
-        field_names.push("subscription".into());
+        field_names.push(Term::new("subscription", Span::call_site()));
     }
 
-    let node_types: Vec<syn::Ident> = field_names
+    let node_types: Vec<Term> = field_names
         .iter()
-        .map(|name| format!("{}", name).to_camel_case().into())
+        .map(|name| Term::new(&format!("{}", name).to_camel_case(), Span::call_site()))
         .collect();
     let field_names_2 = field_names.clone();
 
@@ -227,7 +229,7 @@ fn impl_schema_coerce(
 }
 
 fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
-    let path_ident: syn::Ident = "path".into();
+    let path_ident = Term::new("path", Span::call_site());
     for attr in attributes.iter() {
         if let syn::MetaItem::List(_ident, items) = &attr.value {
             for item in items.iter() {
@@ -236,7 +238,7 @@ fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
                     syn::Lit::Str(value, _),
                 )) = item
                 {
-                    if name == &path_ident {
+                    if name == &path_ident.to_string() {
                         return Some(value.to_string());
                     }
                 }
@@ -304,17 +306,17 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
     if let Some(ref schema_definition) = context.schema_type {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
-            let object_name: syn::Ident = query.as_str().into();
+            let object_name = Term::new(query.as_str(), Span::call_site());
             fields.push(quote!(query: Vec<#object_name>));
         }
 
         if let Some(ref mutation) = schema_definition.mutation {
-            let object_name: syn::Ident = mutation.as_str().into();
+            let object_name = Term::new(mutation.as_str(), Span::call_site());
             fields.push(quote!(mutation: Vec<#object_name>));
         }
 
         if let Some(ref subscription) = schema_definition.subscription {
-            let object_name: syn::Ident = subscription.as_str().into();
+            let object_name = Term::new(subscription.as_str(), Span::call_site());
             fields.push(quote!(subscription: Vec<#object_name>));
         }
 
@@ -328,10 +330,10 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
 }
 
 fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::Tokens {
-    let name: syn::Ident = union_type.name.as_str().into();
+    let name = Term::new(union_type.name.as_str(), Span::call_site());
     let united_types = union_type.types.iter().map(|ty| {
-        let ident: syn::Ident = format!("on{}", ty.as_str()).into();
-        let selection_type: syn::Ident = ty.as_str().into();
+        let ident = Term::new(&format!("on{}", ty.as_str()), Span::call_site());
+        let selection_type = Term::new(ty.as_str(), Span::call_site());
         quote!(#ident(Vec<#selection_type>))
     });
     quote! {
@@ -343,14 +345,14 @@ fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::T
 }
 
 fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> quote::Tokens {
-    let name: syn::Ident = input_type.name.as_str().into();
-    let values: Vec<syn::Ident> = input_type
+    let name = Term::new(&input_type.name, Span::call_site());
+    let values: Vec<Term> = input_type
         .fields
         .iter()
-        .map(|v| v.name.to_camel_case().into())
+        .map(|v| Term::new(&v.name.to_camel_case(), Span::call_site()))
         .collect();
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = input_type.description {
-        let str_literal: syn::Lit = doc_string.as_str().into();
+        let str_literal = Literal::string(&doc_string);
         quote!(#[doc = #str_literal])
     } else {
         quote!()
@@ -366,14 +368,14 @@ fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> qu
 }
 
 fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens {
-    let name: syn::Ident = enum_type.name.as_str().into();
-    let values: Vec<syn::Ident> = enum_type
+    let name = Term::new(enum_type.name.as_str(), Span::call_site());
+    let values: Vec<Term> = enum_type
         .values
         .iter()
-        .map(|v| v.name.to_camel_case().into())
+        .map(|v| Term::new(v.name.to_camel_case().as_str(), Span::call_site()))
         .collect();
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = enum_type.description {
-        let str_literal: syn::Lit = doc_string.as_str().into();
+        let str_literal = Literal::string(doc_string.as_str());
         quote!(#[doc = #str_literal])
     } else {
         quote!()
@@ -401,26 +403,30 @@ fn gql_type_to_rs(
     object_type: &graphql_parser::schema::ObjectType,
     context: &DeriveContext,
 ) -> quote::Tokens {
-    let name: syn::Ident = object_type.name.as_str().into();
+    let name = Term::new(object_type.name.as_str(), Span::call_site());
     // let struct_name_lit: syn::Lit = object_type.name.as_str().into();
     let field_names: Vec<quote::Tokens> = object_type
         .fields
         .iter()
         .map(|f| {
-            let ident: syn::Ident = f.name.to_camel_case().into();
+            let ident = Term::new(&f.name.to_camel_case(), Span::call_site());
             let args: Vec<quote::Tokens> = f.arguments
                 .iter()
                 .map(|arg| {
-                    let field_name: syn::Ident = arg.name.to_mixed_case().into();
+                    let field_name =
+                        Term::new(arg.name.to_mixed_case().as_str(), Span::call_site());
                     let field_type = gql_type_to_json_type(&arg.value_type);
                     quote!( #field_name: #field_type )
                 })
                 .collect();
             let field_type_name = extract_inner_name(&f.field_type);
-            let sub_field_set: Option<syn::Ident> = if context.is_scalar(field_type_name) {
+            let sub_field_set: Option<Term> = if context.is_scalar(field_type_name) {
                 None
             } else {
-                Some(field_type_name.to_camel_case().into())
+                Some(Term::new(
+                    field_type_name.to_camel_case().as_str(),
+                    Span::call_site(),
+                ))
             };
             let sub_field_set: Option<quote::Tokens> =
                 sub_field_set.map(|set| quote!{ selection: Vec<#set>, });
@@ -432,7 +438,7 @@ fn gql_type_to_rs(
         })
         .collect();
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = object_type.description {
-        let str_literal: syn::Lit = doc_string.as_str().into();
+        let str_literal = Literal::string(doc_string.as_str());
         quote!(#[doc = #str_literal])
     } else {
         quote!()
@@ -454,7 +460,7 @@ fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Token
         NamedType(name) => match name.as_str() {
             "Boolean" => quote!(Option<bool>),
             _ => {
-                let ident: syn::Ident = name.as_str().into();
+                let ident = Term::new(name, Span::call_site());
                 quote!(Option<#ident>)
             }
         },
