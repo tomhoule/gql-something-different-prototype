@@ -4,7 +4,7 @@ use query_validation::ValidationContext;
 
 /// This should be implemented by the schema. It coerces a Schema struct from a query root, recursively coercing fields.
 pub trait CoerceQueryDocument {
-    fn coerce(query: Document, context: &ValidationContext) -> Self;
+    fn coerce(query: &Document, context: &ValidationContext) -> Self;
 }
 
 /// Coerces a selection into the corresponding object, interface or union type

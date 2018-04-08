@@ -160,17 +160,60 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(implementation);
     }
 
+    coerce_impls.push(impl_schema_coerce(&context.schema_type.clone().expect("Schema is present"), context));
+
     coerce_impls
 }
 
-fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, context: &DeriveContext) -> quote::Tokens {
+fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, _context: &DeriveContext) -> quote::Tokens {
+    let mut field_values: Vec<syn::Ident> = Vec::new();
+    let mut field_names: Vec<syn::Ident> = Vec::new();
+
+    if let Some(ref name) = schema.query {
+        let name: syn::Ident = name.as_str().into();
+        field_values.push(name);
+        field_names.push("query".into());
+    }
+
+    if let Some(ref name) = schema.mutation {
+        let name: syn::Ident = name.as_str().into();
+        field_values.push(name);
+        field_names.push("mutation".into());        
+    }
+
+    if let Some(ref name) = schema.subscription {
+        let name: syn::Ident = name.as_str().into();
+        field_values.push(name);
+        field_names.push("subscription".into());        
+    }
+
+    let node_types: Vec<syn::Ident> = field_names.iter().map(|name| format!("{}", name).to_camel_case().into()).collect();
+    let field_names_2 = field_names.clone();
+
     quote! {
-        impl ::tokio_gql::coercion::CoerceQueryDocument {
+        impl ::tokio_gql::coercion::CoerceQueryDocument for Schema {
             fn coerce(
-                query: ::graphql_parser::query::Document,
+                document: &::graphql_parser::query::Document,
                 context: &::tokio_gql::query_validation::ValidationContext
-            ) {
-                unimplemented!();
+            ) -> Self {
+                use graphql_parser::query::*;
+                
+                #(
+                    let #field_names = document.definitions
+                        .iter()
+                        .filter_map(|op| {
+                            if let Definition::Operation(OperationDefinition::#node_types(ref definition)) = op {
+                                return Some(#field_values::coerce(definition.clone().selection_set, context))
+                            }
+                            None
+                        })
+                        .next()
+                        .unwrap();
+                )*
+
+                Schema {
+                    #(#field_names_2),*
+                }
             }
         }
     }
@@ -247,7 +290,7 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         buf.push(gql_union_to_rs(union_type, &context));
     }
 
-    for interface_type in context.interface_types.values() {
+    for _interface_type in context.interface_types.values() {
         unimplemented!();
     }
 
@@ -255,20 +298,21 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
             let object_name: syn::Ident = query.as_str().into();
-            fields.push(quote!(query: #object_name));
+            fields.push(quote!(query: Vec<#object_name>));
         }
 
         if let Some(ref mutation) = schema_definition.mutation {
             let object_name: syn::Ident = mutation.as_str().into();
-            fields.push(quote!(mutation: #object_name));
+            fields.push(quote!(mutation: Vec<#object_name>));
         }
 
         if let Some(ref subscription) = schema_definition.subscription {
             let object_name: syn::Ident = subscription.as_str().into();
-            fields.push(quote!(subscription: #object_name));
+            fields.push(quote!(subscription: Vec<#object_name>));
         }
 
         buf.push(quote!{
+            #[derive(Debug, PartialEq)]
             pub struct Schema {
                 #(#fields),*,
             }
@@ -284,6 +328,7 @@ fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::T
         quote!(#ident(Vec<#selection_type>))
     });
     quote! {
+        #[derive(Debug, PartialEq)]
         pub enum #name {
             #(#united_types),*
         }
@@ -306,6 +351,7 @@ fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> qu
 
     quote!{
         #doc_attr
+        #[derive(Debug, PartialEq)]
         pub enum #name {
             #(#values),* ,
         }
@@ -327,6 +373,7 @@ fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens
     };
     quote!{
         #doc_attr
+        #[derive(Debug, PartialEq)]
         pub enum #name {
             #(#values),* ,
         }
@@ -443,6 +490,7 @@ mod tests {
                 ingredients: [String!]!
             }
             "# => {
+                #[derive(Debug, PartialEq)]
                 pub enum Pasta { Shape, Ingredients }
             }
         }
@@ -457,6 +505,7 @@ mod tests {
                 ingredients(filter: String!): [String!]!
             }
             "# => {
+                #[derive(Debug, PartialEq)]                
                 pub enum Pasta { Shape { strict: Option<bool> }, Ingredients { filter: Option<String> } }
             }
         }
@@ -475,6 +524,7 @@ mod tests {
             }
             "## => {
                 #[doc = "Represents a point on the plane.\n"]
+                #[derive(Debug, PartialEq)]                                
                 pub enum Point { X, Y }
             }
         }
@@ -500,16 +550,19 @@ mod tests {
                     dessert: DessertDescriptor!
                 }
             "## => {
+                #[derive(Debug, PartialEq)]
                 pub enum DessertDescriptor {
                     Name,
                     ContainsChocolate
                 }
 
+                #[derive(Debug, PartialEq)]
                 pub enum Cheese {
                     Name,
                     Blue
                 }
 
+                #[derive(Debug, PartialEq)]                
                 pub enum Meal {
                     MainCourse,
                     Cheese { selection: Vec<Cheese>, vegan: Option<bool> },
@@ -529,6 +582,7 @@ mod tests {
                 CORGI
             }
             "## => {
+                #[derive(Debug, PartialEq)]                                
                 pub enum Dog {
                     Golden,
                     Chihuahua,
@@ -553,6 +607,7 @@ mod tests {
             }
             "## => {
                 #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
+                #[derive(Debug, PartialEq)]                
                 pub enum BreadKind {
                     White,
                     FullGrain,
@@ -576,6 +631,7 @@ mod tests {
             }
             "## => {
                 #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
+                #[derive(Debug, PartialEq)]                                
                 pub enum Point {
                     X,
                     Y,
@@ -596,10 +652,27 @@ mod tests {
                 subscription: TheSubscription
             }
             "## => {
+                #[derive(Debug, PartialEq)]                                
                 pub struct Schema {
-                    query: MyQuery,
-                    mutation: AMutation,
-                    subscription: TheSubscription,
+                    query: Vec<MyQuery>,
+                    mutation: Vec<AMutation>,
+                    subscription: Vec<TheSubscription>,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn partial_schema_definition() {
+        assert_expands_to! {
+            r##"
+            schema {
+                query: SomeQuery
+            }
+            "## => {
+                #[derive(Debug, PartialEq)]
+                pub struct Schema {
+                    query: Vec<SomeQuery>,
                 }
             }
         }
@@ -611,6 +684,7 @@ mod tests {
             r##"
             union SearchResult = Human | Droid | Starship
             "## => {
+                #[derive(Debug, PartialEq)]                                
                 pub enum SearchResult {
                     onHuman(Vec<Human>),
                     onDroid(Vec<Droid>),
