@@ -9,6 +9,9 @@ impl ValidationContext {
     pub fn new() -> ValidationContext {
         let fragment_definitions = Vec::new();
         let variable_definitions = Vec::new();
-        ValidationContext { fragment_definitions, variable_definitions }
+        ValidationContext {
+            fragment_definitions,
+            variable_definitions,
+        }
     }
 }

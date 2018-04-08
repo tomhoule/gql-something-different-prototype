@@ -1,5 +1,4 @@
-
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
 extern crate graphql_parser;
 extern crate heck;
@@ -125,14 +124,13 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
 
     for object_type in context.object_types.iter() {
         let name: syn::Ident = object_type.name.as_str().into();
-        let field_matchers = object_type.fields.iter()
-            .map(|field| {
-                let variant_name: syn::Ident = field.name.to_camel_case().into();
-                let variant_name_literal = &field.name;
-                quote! {
-                    if field.name == #variant_name_literal { result.push(#name::#variant_name) }
-                }
-            });
+        let field_matchers = object_type.fields.iter().map(|field| {
+            let variant_name: syn::Ident = field.name.to_camel_case().into();
+            let variant_name_literal = &field.name;
+            quote! {
+                if field.name == #variant_name_literal { result.push(#name::#variant_name) }
+            }
+        });
         let implementation = quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name {
                 fn coerce(
@@ -160,12 +158,18 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(implementation);
     }
 
-    coerce_impls.push(impl_schema_coerce(&context.schema_type.clone().expect("Schema is present"), context));
+    coerce_impls.push(impl_schema_coerce(
+        &context.schema_type.clone().expect("Schema is present"),
+        context,
+    ));
 
     coerce_impls
 }
 
-fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, _context: &DeriveContext) -> quote::Tokens {
+fn impl_schema_coerce(
+    schema: &graphql_parser::schema::SchemaDefinition,
+    _context: &DeriveContext,
+) -> quote::Tokens {
     let mut field_values: Vec<syn::Ident> = Vec::new();
     let mut field_names: Vec<syn::Ident> = Vec::new();
 
@@ -178,16 +182,19 @@ fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, _contex
     if let Some(ref name) = schema.mutation {
         let name: syn::Ident = name.as_str().into();
         field_values.push(name);
-        field_names.push("mutation".into());        
+        field_names.push("mutation".into());
     }
 
     if let Some(ref name) = schema.subscription {
         let name: syn::Ident = name.as_str().into();
         field_values.push(name);
-        field_names.push("subscription".into());        
+        field_names.push("subscription".into());
     }
 
-    let node_types: Vec<syn::Ident> = field_names.iter().map(|name| format!("{}", name).to_camel_case().into()).collect();
+    let node_types: Vec<syn::Ident> = field_names
+        .iter()
+        .map(|name| format!("{}", name).to_camel_case().into())
+        .collect();
     let field_names_2 = field_names.clone();
 
     quote! {
@@ -197,7 +204,7 @@ fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, _contex
                 context: &::tokio_gql::query_validation::ValidationContext
             ) -> Self {
                 use graphql_parser::query::*;
-                
+
                 #(
                     let #field_names = document.definitions
                         .iter()
@@ -505,7 +512,7 @@ mod tests {
                 ingredients(filter: String!): [String!]!
             }
             "# => {
-                #[derive(Debug, PartialEq)]                
+                #[derive(Debug, PartialEq)]
                 pub enum Pasta { Shape { strict: Option<bool> }, Ingredients { filter: Option<String> } }
             }
         }
@@ -524,7 +531,7 @@ mod tests {
             }
             "## => {
                 #[doc = "Represents a point on the plane.\n"]
-                #[derive(Debug, PartialEq)]                                
+                #[derive(Debug, PartialEq)]
                 pub enum Point { X, Y }
             }
         }
@@ -562,7 +569,7 @@ mod tests {
                     Blue
                 }
 
-                #[derive(Debug, PartialEq)]                
+                #[derive(Debug, PartialEq)]
                 pub enum Meal {
                     MainCourse,
                     Cheese { selection: Vec<Cheese>, vegan: Option<bool> },
@@ -582,7 +589,7 @@ mod tests {
                 CORGI
             }
             "## => {
-                #[derive(Debug, PartialEq)]                                
+                #[derive(Debug, PartialEq)]
                 pub enum Dog {
                     Golden,
                     Chihuahua,
@@ -607,7 +614,7 @@ mod tests {
             }
             "## => {
                 #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
-                #[derive(Debug, PartialEq)]                
+                #[derive(Debug, PartialEq)]
                 pub enum BreadKind {
                     White,
                     FullGrain,
@@ -631,7 +638,7 @@ mod tests {
             }
             "## => {
                 #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
-                #[derive(Debug, PartialEq)]                                
+                #[derive(Debug, PartialEq)]
                 pub enum Point {
                     X,
                     Y,
@@ -652,7 +659,7 @@ mod tests {
                 subscription: TheSubscription
             }
             "## => {
-                #[derive(Debug, PartialEq)]                                
+                #[derive(Debug, PartialEq)]
                 pub struct Schema {
                     query: Vec<MyQuery>,
                     mutation: Vec<AMutation>,
@@ -684,7 +691,7 @@ mod tests {
             r##"
             union SearchResult = Human | Droid | Starship
             "## => {
-                #[derive(Debug, PartialEq)]                                
+                #[derive(Debug, PartialEq)]
                 pub enum SearchResult {
                     onHuman(Vec<Human>),
                     onDroid(Vec<Droid>),

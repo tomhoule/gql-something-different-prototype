@@ -24,5 +24,10 @@ fn query_coercion_works() {
     let query = parse_query(query).unwrap();
     let user_fields = Schema::coerce(&query, &context);
 
-    assert_eq!(user_fields, Schema { query: vec![User::LastName, User::Greeting] });
+    assert_eq!(
+        user_fields,
+        Schema {
+            query: vec![User::LastName, User::Greeting],
+        }
+    );
 }
