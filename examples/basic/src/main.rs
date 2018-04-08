@@ -1,5 +1,3 @@
-extern crate graphql_parser;
-
 #[macro_use]
 extern crate tokio_gql;
 

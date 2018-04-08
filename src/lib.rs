@@ -4,6 +4,8 @@ extern crate futures;
 extern crate serde;
 extern crate serde_json as json;
 
+pub extern crate graphql_parser;
+
 pub mod coercion;
 pub mod identifiable;
 pub mod query_validation;
@@ -20,7 +22,6 @@ use serde::Serialize;
 // Find the Query type
 // For each field, generate either a prefixed type or a module (maybe more a module?)
 //
-extern crate graphql_parser;
 
 use graphql_parser::query;
 use identifiable::Identifiable;

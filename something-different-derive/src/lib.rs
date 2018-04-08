@@ -136,18 +136,18 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         let implementation = quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name {
                 fn coerce(
-                    query: SelectionSet,
+                    query: ::tokio_gql::graphql_parser::query::SelectionSet,
                     context: &::tokio_gql::query_validation::ValidationContext,
                 ) -> Vec<#name> {
                     let mut result = Vec::new();
 
                     for item in query.items.iter() {
                         match item {
-                            ::graphql_parser::query::Selection::Field(field) => {
+                            ::tokio_gql::graphql_parser::query::Selection::Field(field) => {
                                 #(#field_matchers)*
                             }
-                            ::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!(),
-                            ::graphql_parser::query::Selection::InlineFragment(_) => unimplemented!(),
+                            ::tokio_gql::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!(),
+                            ::tokio_gql::graphql_parser::query::Selection::InlineFragment(_) => unimplemented!(),
 
                         }
                     }
@@ -202,16 +202,16 @@ fn impl_schema_coerce(
     quote! {
         impl ::tokio_gql::coercion::CoerceQueryDocument for Schema {
             fn coerce(
-                document: &::graphql_parser::query::Document,
+                document: &::tokio_gql::graphql_parser::query::Document,
                 context: &::tokio_gql::query_validation::ValidationContext
             ) -> Self {
-                use graphql_parser::query::*;
+                use ::tokio_gql::graphql_parser::query::*;
 
                 #(
                     let #field_names = document.definitions
                         .iter()
                         .filter_map(|op| {
-                            if let Definition::Operation(OperationDefinition::#node_types(ref definition)) = op {
+                            if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
                                 return Some(#field_values::coerce(definition.clone().selection_set, context))
                             }
                             None
