@@ -2,8 +2,9 @@ extern crate futures;
 extern crate serde;
 extern crate serde_json as json;
 
-mod coercion;
+pub mod coercion;
 pub mod identifiable;
+pub mod query_validation;
 
 #[macro_use]
 extern crate something_different_derive;

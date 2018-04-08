@@ -1,0 +1,8 @@
+type User {
+  lastName: String
+  greeting: String!
+}
+
+schema {
+  query: User
+}

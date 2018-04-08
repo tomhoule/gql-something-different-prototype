@@ -1,3 +1,6 @@
+
+#![recursion_limit="128"]
+
 extern crate graphql_parser;
 extern crate heck;
 extern crate proc_macro;
@@ -33,6 +36,7 @@ impl DeriveContext {
         scalar_types.insert("Float".to_string());
         scalar_types.insert("String".to_string());
         scalar_types.insert("Boolean".to_string());
+        scalar_types.insert("ID".to_string());
 
         let object_types = Vec::new();
         let input_types = HashMap::new();
@@ -110,14 +114,66 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
-        #(definitions)*
+        #(#definitions)*
 
         #(#extractor_impls)*
     }
 }
 
 fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
-    Vec::new()
+    let mut coerce_impls = Vec::new();
+
+    for object_type in context.object_types.iter() {
+        let name: syn::Ident = object_type.name.as_str().into();
+        let field_matchers = object_type.fields.iter()
+            .map(|field| {
+                let variant_name: syn::Ident = field.name.to_camel_case().into();
+                let variant_name_literal = &field.name;
+                quote! {
+                    if field.name == #variant_name_literal { result.push(#name::#variant_name) }
+                }
+            });
+        let implementation = quote! {
+            impl ::tokio_gql::coercion::CoerceSelection for #name {
+                fn coerce(
+                    query: SelectionSet,
+                    context: &::tokio_gql::query_validation::ValidationContext,
+                ) -> Vec<#name> {
+                    let mut result = Vec::new();
+
+                    for item in query.items.iter() {
+                        match item {
+                            ::graphql_parser::query::Selection::Field(field) => {
+                                #(#field_matchers)*
+                            }
+                            ::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!(),
+                            ::graphql_parser::query::Selection::InlineFragment(_) => unimplemented!(),
+
+                        }
+                    }
+
+                    result
+                }
+            }
+        };
+
+        coerce_impls.push(implementation);
+    }
+
+    coerce_impls
+}
+
+fn impl_schema_coerce(schema: &graphql_parser::schema::SchemaDefinition, context: &DeriveContext) -> quote::Tokens {
+    quote! {
+        impl ::tokio_gql::coercion::CoerceQueryDocument {
+            fn coerce(
+                query: ::graphql_parser::query::Document,
+                context: &::tokio_gql::query_validation::ValidationContext
+            ) {
+                unimplemented!();
+            }
+        }
+    }
 }
 
 fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
@@ -330,6 +386,7 @@ fn gql_type_to_rs(
 
     quote!(
         #doc_attr
+        #[derive(Debug, PartialEq)]
         pub enum #name {
             #(#field_names),*
         }
