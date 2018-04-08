@@ -1,0 +1,12 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+cache: cargo
+script:
+  - |
+    cargo test &&
+    (cd something-different-derive && cargo test) &&
+    (cd examples/basic && cargo build) &&
+    (cd examples/library && cargo build)
