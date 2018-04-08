@@ -18,17 +18,29 @@ impl ValidationContext {
         }
     }
 
+    pub fn extend_variable_definitions(
+        &mut self,
+        defs: impl IntoIterator<Item = VariableDefinition>,
+    ) {
+        self.variable_definitions.extend(defs.into_iter());
+    }
+
     pub fn push_fragment_definition(&mut self, definition: &FragmentDefinition) {
         self.fragment_definitions.push(definition.clone());
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Fail)]
 pub enum QueryValidationError {
+    #[fail(display = "Invalid selection set")]
     InvalidSelectionSet(SelectionSet),
+    #[fail(display = "Unknown directive")]
     UnknownDirective(Directive),
+    #[fail(display = "Invalid field")]
     InvalidField,
+    #[fail(display = "Invalid field arguments")]
     InvalidFieldArguments,
+    #[fail(display = "Other error (if you see this it is a bug, a report would be very appreciated)")]
     Other,
 }
 
@@ -55,15 +67,30 @@ pub fn validate_query(
         match definition {
             Definition::Operation(op) => match op {
                 OperationDefinition::Query(ref q) => match &schema_definition.query {
-                    Some(_q) => unimplemented!(),
+                    Some(name) => {
+                        context.extend_variable_definitions(q.variable_definitions.clone());
+                        find_by_name(&schema.definitions, name)
+                            .ok_or(QueryValidationError::InvalidField)?
+                            .validate_selection_set(&q.selection_set)?;
+                    }
                     None => return Err(QueryValidationError::InvalidField),
                 },
-                OperationDefinition::Mutation(ref q) => match &schema_definition.mutation {
-                    Some(_m) => unimplemented!(),
+                OperationDefinition::Mutation(ref m) => match &schema_definition.mutation {
+                    Some(name) => {
+                        context.extend_variable_definitions(m.variable_definitions.clone());
+                        find_by_name(&schema.definitions, name)
+                            .ok_or(QueryValidationError::InvalidField)?
+                            .validate_selection_set(&m.selection_set)?;
+                    }
                     None => return Err(QueryValidationError::InvalidField),
                 },
-                OperationDefinition::Subscription(q) => match &schema_definition.subscription {
-                    Some(_s) => unimplemented!(),
+                OperationDefinition::Subscription(s) => match &schema_definition.subscription {
+                    Some(name) => {
+                        context.extend_variable_definitions(s.variable_definitions.clone());
+                        find_by_name(&schema.definitions, name)
+                            .ok_or(QueryValidationError::InvalidField)?
+                            .validate_selection_set(&s.selection_set)?;
+                    }
                     None => return Err(QueryValidationError::InvalidField),
                 },
                 OperationDefinition::SelectionSet(q) => unimplemented!(),
@@ -75,6 +102,56 @@ pub fn validate_query(
     }
 
     Ok(context)
+}
+
+fn find_by_name(definitions: &[schema::Definition], name: &str) -> Option<impl Selectable> {
+    for definition in definitions.iter() {
+        match definition {
+            schema::Definition::TypeDefinition(schema::TypeDefinition::Object(def))
+                if def.name == name =>
+            {
+                return Some(def.clone())
+            }
+            _ => (),
+        }
+    }
+
+    None
+}
+
+trait Selectable {
+    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError>;
+}
+
+impl Selectable for schema::TypeDefinition {
+    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError> {
+        match self {
+            schema::TypeDefinition::Object(obj) => obj.validate_selection_set(set),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl Selectable for schema::ObjectType {
+    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError> {
+        println!(
+            "trying to validate selection set {:?}\n\n on \n{:?}\n\n",
+            set, self
+        );
+        for selected in set.items.iter() {
+            match selected {
+                Selection::Field(field) => {
+                    self.fields
+                        .iter()
+                        .find(|f| f.name == field.name)
+                        .ok_or_else(|| QueryValidationError::InvalidSelectionSet(set.clone()))?;
+                }
+                _ => return Err(QueryValidationError::InvalidSelectionSet(set.clone())),
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -113,6 +190,39 @@ mod tests {
             }
             "## =>
             Err(QueryValidationError::InvalidField)
+        }
+    }
+
+    #[test]
+    fn minimal_valid_query() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    name
+                    age
+                    furDensity
+                    barks
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age: Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Ok(ValidationContext::new())
         }
     }
 }
