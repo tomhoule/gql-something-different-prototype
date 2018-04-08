@@ -10,4 +10,5 @@ proc-macro = true
 graphql-parser = "^0.2.0"
 heck = "*"
 syn = "*"
+proc-macro2 = "*"
 quote = "*"
