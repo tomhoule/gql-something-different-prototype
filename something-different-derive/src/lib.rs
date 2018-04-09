@@ -129,14 +129,38 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         let field_matchers = object_type.fields.iter().map(|field| {
             let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
-            let argument_idents: Vec<Term> = Vec::new();
-            let argument_literals: Vec<Literal> = Vec::new();
+            let argument_idents: Vec<Term> = field
+                .arguments
+                .iter()
+                .map(|arg| Term::new(&arg.name.to_mixed_case(), Span::call_site()))
+                .collect();
+            let argument_literals: Vec<Literal> = field
+                .arguments
+                .iter()
+                .map(|arg| Literal::string(&arg.name))
+                .collect();
+            let argument_idents_clone = argument_idents.clone();
+            let field_type_name = extract_inner_name(&field.field_type);
+            let variant_constructor = if argument_idents.is_empty()
+                && context.is_scalar(field_type_name)
+            {
+                quote!(#name::#variant_name)
+            } else if !argument_idents.is_empty() && !context.is_scalar(field_type_name) {
+                let field_type = Term::new(field_type_name, Span::call_site());
+
+                quote!(#name::#variant_name { selection: #field_type::coerce(query, context), #(#argument_idents_clone),* })
+            } else if argument_idents.is_empty() {
+                let field_type = Term::new(field_type_name, Span::call_site());
+                quote!(#name::#variant_name { selection: #field_type::coerce(query, context) })
+            } else {
+                quote!(#name::#variant_name { #(#argument_idents_clone),* })
+            };
             quote! {
                 if field.name == #variant_name_literal {
                     #(
-                        let #argument_idents = field.arguments.find(|arg| arg.name == #argument_literals).unwrap();
-                    )
-                    result.push(#name::#variant_name { #(#argument_idents),* })
+                        let #argument_idents = field.arguments.iter().find(|(name, _)| name == #argument_literals).unwrap();
+                    )*
+                    result.push(#variant_constructor)
                 }
             }
         });
