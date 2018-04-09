@@ -31,3 +31,45 @@ fn query_coercion_works() {
         }
     );
 }
+
+#[test]
+fn basic_argument_coercion() {
+    let query = r##"
+    query {
+        sayHello(name: "Emilio")
+    }
+    "##;
+    let context = tokio_gql::query_validation::ValidationContext::new();
+    let query = parse_query(query).unwrap();
+    let coerced = Schema::coerce(&query, &context);
+
+    assert_eq!(
+        coerced,
+        Schema {
+            query: vec![
+                User::SayHello {
+                    name: Some("Emilio".to_string()),
+                },
+            ],
+        }
+    )
+}
+
+#[test]
+fn optional_argument_coercion() {
+    let query = r##"
+    query {
+        sayHello
+    }
+    "##;
+    let context = tokio_gql::query_validation::ValidationContext::new();
+    let query = parse_query(query).unwrap();
+    let coerced = Schema::coerce(&query, &context);
+
+    assert_eq!(
+        coerced,
+        Schema {
+            query: vec![User::SayHello { name: None }],
+        }
+    )
+}

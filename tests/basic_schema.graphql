@@ -1,6 +1,7 @@
 type User {
   lastName: String
   greeting: String!
+  sayHello(name: String): String
 }
 
 schema {
