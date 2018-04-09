@@ -89,7 +89,7 @@ impl DeriveContext {
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
 pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenStream {
     let s = input.to_string();
-    let ast = syn::parse_derive_input(&s).unwrap();
+    let ast = syn::parse_derive_input(&s).expect("Derive input is well formed");
     let gen = impl_something_different(&ast);
     gen.into()
 }
@@ -102,7 +102,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let schema_path = format!("{}/{}", cargo_manifest_dir, schema_path);
     let mut file = File::open(schema_path).expect("File not found");
     let mut the_schema_string = String::new();
-    file.read_to_string(&mut the_schema_string).unwrap();
+    file.read_to_string(&mut the_schema_string)
+        .expect("Could not read schema.");
 
     let parsed_schema = graphql_parser::parse_schema(&the_schema_string).expect("parse error");
     let schema_as_string_literal = Literal::string(&the_schema_string);
@@ -147,11 +148,10 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 quote!(#name::#variant_name)
             } else if !argument_idents.is_empty() && !context.is_scalar(field_type_name) {
                 let field_type = Term::new(field_type_name, Span::call_site());
-
-                quote!(#name::#variant_name { selection: #field_type::coerce(query, context), #(#argument_idents_clone),* })
+                quote!(#name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(query, context)?, #(#argument_idents_clone),* })
             } else if argument_idents.is_empty() {
                 let field_type = Term::new(field_type_name, Span::call_site());
-                quote!(#name::#variant_name { selection: <#field_type as tokio_gql::coercion::CoerceSelection>::coerce(query, context) })
+                quote!(#name::#variant_name { selection: <#field_type as tokio_gql::coercion::CoerceSelection>::coerce(query, context)? })
             } else {
                 quote!(#name::#variant_name { #(#argument_idents_clone),* })
             };
@@ -175,8 +175,8 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 fn coerce(
                     query: &::tokio_gql::graphql_parser::query::SelectionSet,
                     context: &::tokio_gql::query_validation::ValidationContext,
-                ) -> Vec<#name> {
-                    let mut result = Vec::new();
+                ) -> Result<Vec<#name>, ::tokio_gql::coercion::CoercionError> {
+                    let mut result: Vec<#name> = Vec::new();
 
                     for item in query.items.iter() {
                         match item {
@@ -189,7 +189,7 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                         }
                     }
 
-                    result
+                    Ok(result)
                 }
             }
         };
@@ -203,11 +203,6 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     ));
 
     coerce_impls
-}
-
-struct FieldVariantDescriptor {
-    arguments: Vec<graphql_parser::schema::InputValue>,
-    field_type: Option<String>,
 }
 
 fn impl_schema_coerce(
@@ -240,29 +235,35 @@ fn impl_schema_coerce(
         .map(|name| Term::new(&format!("{}", name).to_camel_case(), Span::call_site()))
         .collect();
     let field_names_2 = field_names.clone();
+    let field_values_clone = field_values.clone();
 
     quote! {
         impl ::tokio_gql::coercion::CoerceQueryDocument for Schema {
             fn coerce(
                 document: &::tokio_gql::graphql_parser::query::Document,
                 context: &::tokio_gql::query_validation::ValidationContext
-            ) -> Self {
+            ) -> Result<Self, ::tokio_gql::coercion::CoercionError> {
                 #(
-                    let #field_names = document.definitions
+                    let #field_names: Vec<#field_values> = document.definitions
                         .iter()
                         .filter_map(|op| {
                             if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
-                                return Some(<#field_values as ::tokio_gql::coercion::CoerceSelection>::coerce(&definition.clone().selection_set, context))
+                                Some(
+                                    <#field_values_clone as ::tokio_gql::coercion::CoerceSelection>::coerce(
+                                        &definition.clone().selection_set,
+                                        context,
+                                    ).expect("This should not panic, but return early with a CoercionError"))
+                            } else {
+                                None
                             }
-                            None
                         })
                         .next()
                         .unwrap();
                 )*
 
-                Schema {
+                Ok(Schema {
                     #(#field_names_2),*
-                }
+                })
             }
         }
     }

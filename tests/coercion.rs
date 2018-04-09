@@ -26,9 +26,9 @@ fn query_coercion_works() {
 
     assert_eq!(
         user_fields,
-        Schema {
+        Ok(Schema {
             query: vec![User::LastName, User::Greeting],
-        }
+        })
     );
 }
 
@@ -45,13 +45,13 @@ fn basic_argument_coercion() {
 
     assert_eq!(
         coerced,
-        Schema {
+        Ok(Schema {
             query: vec![
                 User::SayHello {
                     name: Some("Emilio".to_string()),
                 },
             ],
-        }
+        })
     )
 }
 
@@ -68,14 +68,13 @@ fn optional_argument_coercion() {
 
     assert_eq!(
         coerced,
-        Schema {
+        Ok(Schema {
             query: vec![User::SayHello { name: None }],
-        }
+        })
     )
 }
 
 #[test]
-#[should_panic]
 fn wrong_argument_name_coercion() {
     let query = r##"
     query {
@@ -88,7 +87,6 @@ fn wrong_argument_name_coercion() {
 }
 
 #[test]
-#[should_panic]
 fn wrong_argument_type_coercion() {
     let query = r##"
     query {
