@@ -151,14 +151,20 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 quote!(#name::#variant_name { selection: #field_type::coerce(query, context), #(#argument_idents_clone),* })
             } else if argument_idents.is_empty() {
                 let field_type = Term::new(field_type_name, Span::call_site());
-                quote!(#name::#variant_name { selection: #field_type::coerce(query, context) })
+                quote!(#name::#variant_name { selection: <#field_type as tokio_gql::coercion::CoerceSelection>::coerce(query, context) })
             } else {
                 quote!(#name::#variant_name { #(#argument_idents_clone),* })
             };
             quote! {
                 if field.name == #variant_name_literal {
                     #(
-                        let #argument_idents = field.arguments.iter().find(|(name, _)| name == #argument_literals).unwrap();
+                        let #argument_idents = field.arguments.iter().find(|(name, _)| name == #argument_literals).and_then(|(_, value)| {
+                            if let ::tokio_gql::graphql_parser::query::Value::String(inner) = value {
+                                Some(inner.to_owned())
+                            } else {
+                                None
+                            }
+                        });
                     )*
                     result.push(#variant_constructor)
                 }
@@ -167,14 +173,14 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         let implementation = quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name {
                 fn coerce(
-                    query: ::tokio_gql::graphql_parser::query::SelectionSet,
+                    query: &::tokio_gql::graphql_parser::query::SelectionSet,
                     context: &::tokio_gql::query_validation::ValidationContext,
                 ) -> Vec<#name> {
                     let mut result = Vec::new();
 
                     for item in query.items.iter() {
                         match item {
-                            ::tokio_gql::graphql_parser::query::Selection::Field(field) => {
+                            ::tokio_gql::graphql_parser::query::Selection::Field(ref field) => {
                                 #(#field_matchers)*
                             }
                             ::tokio_gql::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!(),
@@ -241,14 +247,12 @@ fn impl_schema_coerce(
                 document: &::tokio_gql::graphql_parser::query::Document,
                 context: &::tokio_gql::query_validation::ValidationContext
             ) -> Self {
-                use ::tokio_gql::graphql_parser::query::*;
-
                 #(
                     let #field_names = document.definitions
                         .iter()
                         .filter_map(|op| {
                             if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
-                                return Some(#field_values::coerce(definition.clone().selection_set, context))
+                                return Some(<#field_values as ::tokio_gql::coercion::CoerceSelection>::coerce(&definition.clone().selection_set, context))
                             }
                             None
                         })

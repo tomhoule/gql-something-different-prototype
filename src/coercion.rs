@@ -9,10 +9,10 @@ pub trait CoerceQueryDocument {
 
 /// Coerces a selection into the corresponding object, interface or union type
 pub trait CoerceSelection: Sized {
-    fn coerce(query: SelectionSet, context: &ValidationContext) -> Vec<Self>;
+    fn coerce(query: &SelectionSet, context: &ValidationContext) -> Vec<Self>;
 }
 
 /// Coerces a response to match the query type.
 pub trait CoerceResponse {
-    fn coerce(query: Document, response: ::json::Value) -> ::json::Value;
+    fn coerce(query: &Document, response: ::json::Value) -> ::json::Value;
 }
