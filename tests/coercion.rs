@@ -73,3 +73,29 @@ fn optional_argument_coercion() {
         }
     )
 }
+
+#[test]
+#[should_panic]
+fn wrong_argument_name_coercion() {
+    let query = r##"
+    query {
+        sayHello(name: 33)
+    }
+    "##;
+    let context = tokio_gql::query_validation::ValidationContext::new();
+    let query = parse_query(query).unwrap();
+    let coerced = Schema::coerce(&query, &context);
+}
+
+#[test]
+#[should_panic]
+fn wrong_argument_type_coercion() {
+    let query = r##"
+    query {
+        sayHello(age: "meow")
+    }
+    "##;
+    let context = tokio_gql::query_validation::ValidationContext::new();
+    let query = parse_query(query).unwrap();
+    let coerced = Schema::coerce(&query, &context);
+}
