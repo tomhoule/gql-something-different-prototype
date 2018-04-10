@@ -84,6 +84,7 @@ fn wrong_argument_name_coercion() {
     let context = tokio_gql::query_validation::ValidationContext::new();
     let query = parse_query(query).unwrap();
     let coerced = Schema::coerce(&query, &context);
+    assert_eq!(coerced, Err(CoercionError));
 }
 
 #[test]
@@ -96,4 +97,5 @@ fn wrong_argument_type_coercion() {
     let context = tokio_gql::query_validation::ValidationContext::new();
     let query = parse_query(query).unwrap();
     let coerced = Schema::coerce(&query, &context);
+    assert_eq!(coerced, Err(CoercionError));
 }

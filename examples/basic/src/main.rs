@@ -6,5 +6,5 @@ extern crate tokio_gql;
 struct MySchema;
 
 fn main() {
-    println!("Schema: {}", THE_SCHEMA);
+    println!("Schema:\n\n {}", THE_SCHEMA);
 }

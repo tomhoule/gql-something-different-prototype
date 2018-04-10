@@ -8,83 +8,20 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+mod context;
+mod enums;
+mod inputs;
+mod objects;
+mod shared;
+mod unions;
+
+use context::DeriveContext;
 use proc_macro2::{Literal, Span, Term};
 use std::fs::File;
 use std::io::prelude::*;
 
-use graphql_parser::schema::{EnumType, InputObjectType, InterfaceType, ObjectType,
-                             SchemaDefinition, UnionType};
-use heck::*;
+use heck::{CamelCase, MixedCase};
 use proc_macro::TokenStream;
-use std::collections::{HashMap, HashSet};
-
-struct DeriveContext {
-    enum_types: HashMap<String, EnumType>,
-    input_types: HashMap<String, InputObjectType>,
-    interface_types: HashMap<String, InterfaceType>,
-    object_types: Vec<ObjectType>,
-    scalar_types: HashSet<String>,
-    union_types: HashMap<String, UnionType>,
-    schema_type: Option<SchemaDefinition>,
-}
-
-impl DeriveContext {
-    pub fn new() -> DeriveContext {
-        let mut scalar_types = HashSet::new();
-
-        // See https://graphql.org/learn/schema/#scalar-types
-        scalar_types.insert("Int".to_string());
-        scalar_types.insert("Float".to_string());
-        scalar_types.insert("String".to_string());
-        scalar_types.insert("Boolean".to_string());
-        scalar_types.insert("ID".to_string());
-
-        let object_types = Vec::new();
-        let input_types = HashMap::new();
-        let enum_types = HashMap::new();
-        let union_types = HashMap::new();
-        let interface_types = HashMap::new();
-
-        DeriveContext {
-            enum_types,
-            input_types,
-            interface_types,
-            object_types,
-            scalar_types,
-            schema_type: None,
-            union_types,
-        }
-    }
-
-    pub fn insert_object(&mut self, object_type: ObjectType) {
-        self.object_types.push(object_type);
-    }
-
-    pub fn insert_enum(&mut self, enum_type: EnumType) {
-        self.enum_types.insert(enum_type.name.clone(), enum_type);
-    }
-
-    pub fn insert_input_type(&mut self, input_type: InputObjectType) {
-        self.input_types.insert(input_type.name.clone(), input_type);
-    }
-
-    pub fn insert_scalar(&mut self, scalar_type: String) {
-        self.scalar_types.insert(scalar_type);
-    }
-
-    pub fn is_scalar(&self, type_name: &str) -> bool {
-        self.scalar_types.contains(type_name)
-    }
-
-    pub fn insert_union(&mut self, union_type: UnionType) {
-        self.union_types.insert(union_type.name.clone(), union_type);
-    }
-
-    pub fn insert_interface(&mut self, interface_type: InterfaceType) {
-        self.interface_types
-            .insert(interface_type.name.clone(), interface_type);
-    }
-}
 
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
 pub fn and_now_for_something_completely_different(input: TokenStream) -> TokenStream {
@@ -111,18 +48,18 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     extract_definitions(&parsed_schema, &mut context);
     let mut definitions = Vec::new();
     gql_document_to_rs(&mut definitions, &context);
-    let extractor_impls = extractor_impls(&context);
+    let coerce_impls = coerce_impls(&context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
         #(#definitions)*
 
-        #(#extractor_impls)*
+        #(#coerce_impls)*
     }
 }
 
-fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
+fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     let mut coerce_impls = Vec::new();
 
     for object_type in context.object_types.iter() {
@@ -141,7 +78,7 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 .map(|arg| Literal::string(&arg.name))
                 .collect();
             let argument_idents_clone = argument_idents.clone();
-            let field_type_name = extract_inner_name(&field.field_type);
+            let field_type_name = shared::extract_inner_name(&field.field_type);
             let variant_constructor = if argument_idents.is_empty()
                 && context.is_scalar(field_type_name)
             {
@@ -198,7 +135,7 @@ fn extractor_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     }
 
     coerce_impls.push(impl_schema_coerce(
-        &context.schema_type.clone().expect("Schema is present"),
+        &context.get_schema().expect("Schema is present"),
         context,
     ));
 
@@ -316,7 +253,7 @@ fn extract_definitions(document: &graphql_parser::schema::Document, context: &mu
             },
             Definition::DirectiveDefinition(_) => unimplemented!(),
             Definition::SchemaDefinition(schema_definition) => {
-                context.schema_type = Some(schema_definition.clone())
+                context.set_schema(schema_definition.clone())
             }
             Definition::TypeExtension(_) => unimplemented!(),
         };
@@ -325,26 +262,26 @@ fn extract_definitions(document: &graphql_parser::schema::Document, context: &mu
 
 fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
     for object in context.object_types.iter() {
-        buf.push(gql_type_to_rs(object, &context));
+        buf.push(objects::gql_type_to_rs(object, &context));
     }
 
     for enum_type in context.enum_types.values() {
-        buf.push(gql_enum_to_rs(enum_type));
+        buf.push(enums::gql_enum_to_rs(enum_type));
     }
 
     for input_type in context.input_types.values() {
-        buf.push(gql_input_to_rs(input_type, &context));
+        buf.push(inputs::gql_input_to_rs(input_type, &context));
     }
 
     for union_type in context.union_types.values() {
-        buf.push(gql_union_to_rs(union_type, &context));
+        buf.push(unions::gql_union_to_rs(union_type, &context));
     }
 
     for _interface_type in context.interface_types.values() {
         unimplemented!();
     }
 
-    if let Some(ref schema_definition) = context.schema_type {
+    if let Some(ref schema_definition) = context.get_schema() {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
             let object_name = Term::new(query.as_str(), Span::call_site());
@@ -370,157 +307,12 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
     }
 }
 
-fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::Tokens {
-    let name = Term::new(union_type.name.as_str(), Span::call_site());
-    let united_types = union_type.types.iter().map(|ty| {
-        let ident = Term::new(&format!("on{}", ty.as_str()), Span::call_site());
-        let selection_type = Term::new(ty.as_str(), Span::call_site());
-        quote!(#ident(Vec<#selection_type>))
-    });
-    quote! {
-        #[derive(Debug, PartialEq)]
-        pub enum #name {
-            #(#united_types),*
-        }
-    }
-}
-
-fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> quote::Tokens {
-    let name = Term::new(&input_type.name, Span::call_site());
-    let values: Vec<Term> = input_type
-        .fields
-        .iter()
-        .map(|v| Term::new(&v.name.to_camel_case(), Span::call_site()))
-        .collect();
-    let doc_attr: quote::Tokens = if let Some(ref doc_string) = input_type.description {
-        let str_literal = Literal::string(&doc_string);
-        quote!(#[doc = #str_literal])
-    } else {
-        quote!()
-    };
-
-    quote!{
-        #doc_attr
-        #[derive(Debug, PartialEq)]
-        pub enum #name {
-            #(#values),* ,
-        }
-    }
-}
-
-fn gql_enum_to_rs(enum_type: &graphql_parser::schema::EnumType) -> quote::Tokens {
-    let name = Term::new(enum_type.name.as_str(), Span::call_site());
-    let values: Vec<Term> = enum_type
-        .values
-        .iter()
-        .map(|v| Term::new(v.name.to_camel_case().as_str(), Span::call_site()))
-        .collect();
-    let doc_attr: quote::Tokens = if let Some(ref doc_string) = enum_type.description {
-        let str_literal = Literal::string(doc_string.as_str());
-        quote!(#[doc = #str_literal])
-    } else {
-        quote!()
-    };
-    quote!{
-        #doc_attr
-        #[derive(Debug, PartialEq)]
-        pub enum #name {
-            #(#values),* ,
-        }
-    }
-}
-
-fn extract_inner_name(ty: &graphql_parser::query::Type) -> &str {
-    use graphql_parser::query::Type::*;
-
-    match ty {
-        NamedType(name) => name,
-        ListType(inner) => extract_inner_name(inner),
-        NonNullType(inner) => extract_inner_name(inner),
-    }
-}
-
-fn gql_type_to_rs(
-    object_type: &graphql_parser::schema::ObjectType,
-    context: &DeriveContext,
-) -> quote::Tokens {
-    let name = Term::new(object_type.name.as_str(), Span::call_site());
-    // let struct_name_lit: syn::Lit = object_type.name.as_str().into();
-    let field_names: Vec<quote::Tokens> = object_type
-        .fields
-        .iter()
-        .map(|f| {
-            let ident = Term::new(&f.name.to_camel_case(), Span::call_site());
-            let args: Vec<quote::Tokens> = f.arguments
-                .iter()
-                .map(|arg| {
-                    let field_name =
-                        Term::new(arg.name.to_mixed_case().as_str(), Span::call_site());
-                    let field_type = gql_type_to_json_type(&arg.value_type);
-                    quote!( #field_name: #field_type )
-                })
-                .collect();
-            let field_type_name = extract_inner_name(&f.field_type);
-            let sub_field_set: Option<Term> = if context.is_scalar(field_type_name) {
-                None
-            } else {
-                Some(Term::new(
-                    field_type_name.to_camel_case().as_str(),
-                    Span::call_site(),
-                ))
-            };
-            let sub_field_set: Option<quote::Tokens> =
-                sub_field_set.map(|set| quote!{ selection: Vec<#set>, });
-            if sub_field_set.is_some() || !args.is_empty() {
-                quote!{#ident { #sub_field_set #(#args),* }}
-            } else {
-                quote!(#ident)
-            }
-        })
-        .collect();
-    let doc_attr: quote::Tokens = if let Some(ref doc_string) = object_type.description {
-        let str_literal = Literal::string(doc_string.as_str());
-        quote!(#[doc = #str_literal])
-    } else {
-        quote!()
-    };
-
-    quote!(
-        #doc_attr
-        #[derive(Debug, PartialEq)]
-        pub enum #name {
-            #(#field_names),*
-        }
-    )
-}
-
-fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {
-    use graphql_parser::query::Type::*;
-
-    match gql_type {
-        NamedType(name) => match name.as_str() {
-            "Boolean" => quote!(Option<bool>),
-            _ => {
-                let ident = Term::new(name, Span::call_site());
-                quote!(Option<#ident>)
-            }
-        },
-        ListType(inner) => {
-            let inner_converted = gql_type_to_json_type(&inner);
-            quote!(Vec<#inner_converted>)
-        }
-        NonNullType(inner) => {
-            let inner_converted = gql_type_to_json_type(&inner);
-            quote!(#inner_converted)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use graphql_parser::schema::*;
 
+    /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
     macro_rules! assert_expands_to {
         ($gql_string:expr => $expanded:tt) => {
             let gql = $gql_string;
@@ -627,76 +419,6 @@ mod tests {
     }
 
     #[test]
-    fn enum_derive() {
-        assert_expands_to! {
-            r##"
-            enum Dog {
-                GOLDEN
-                CHIHUAHUA
-                CORGI
-            }
-            "## => {
-                #[derive(Debug, PartialEq)]
-                pub enum Dog {
-                    Golden,
-                    Chihuahua,
-                    Corgi,
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn enum_derive_with_docs() {
-        assert_expands_to! {
-            r##"
-            """
-            The bread kinds supported by this app.
-
-            [Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.
-            """
-            enum BreadKind {
-                WHITE
-                FULL_GRAIN
-            }
-            "## => {
-                #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
-                #[derive(Debug, PartialEq)]
-                pub enum BreadKind {
-                    White,
-                    FullGrain,
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn simple_input_object_derive() {
-        assert_expands_to! {
-            r##"
-            """
-            A point in 2, 3 or 4 dimensions, because why not?
-            """
-            input Point {
-                X: Int!
-                Y: Int!
-                Z: Int!
-                ZZ: Int!
-            }
-            "## => {
-                #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
-                #[derive(Debug, PartialEq)]
-                pub enum Point {
-                    X,
-                    Y,
-                    Z,
-                    Zz,
-                }
-            }
-        }
-    }
-
-    #[test]
     fn schema_definition() {
         assert_expands_to! {
             r##"
@@ -727,22 +449,6 @@ mod tests {
                 #[derive(Debug, PartialEq)]
                 pub struct Schema {
                     query: Vec<SomeQuery>,
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn unions() {
-        assert_expands_to! {
-            r##"
-            union SearchResult = Human | Droid | Starship
-            "## => {
-                #[derive(Debug, PartialEq)]
-                pub enum SearchResult {
-                    onHuman(Vec<Human>),
-                    onDroid(Vec<Droid>),
-                    onStarship(Vec<Starship>)
                 }
             }
         }
