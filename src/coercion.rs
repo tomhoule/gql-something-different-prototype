@@ -1,5 +1,6 @@
 ///! This module contains the traits that are auto-implemented on the derived tree to extract it from a parsed request.
 use graphql_parser::query::*;
+use graphql_parser::schema::Value;
 use query_validation::ValidationContext;
 
 #[derive(Debug, PartialEq)]
@@ -21,4 +22,35 @@ pub trait CoerceSelection: Sized {
 /// Coerces a response to match the query type.
 pub trait CoerceResponse {
     fn coerce(query: &Document, response: ::json::Value) -> ::json::Value;
+}
+
+pub trait CoerceScalar: Sized {
+    fn coerce(value: &Value) -> Result<Self, CoercionError>;
+}
+
+impl CoerceScalar for String {
+    fn coerce(value: &Value) -> Result<String, CoercionError> {
+        match value {
+            Value::String(ref s) => Ok(s.to_string()),
+            _ => Err(CoercionError),
+        }
+    }
+}
+
+impl CoerceScalar for i32 {
+    fn coerce(value: &Value) -> Result<i32, CoercionError> {
+        match value {
+            Value::Int(i) => Ok(i.as_i64().unwrap() as i32),
+            _ => Err(CoercionError),
+        }
+    }
+}
+
+impl<T> CoerceScalar for Option<T>
+where
+    T: CoerceScalar,
+{
+    fn coerce(value: &Value) -> Result<Option<T>, CoercionError> {
+        Ok(Some(T::coerce(value)?))
+    }
 }

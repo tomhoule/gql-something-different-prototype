@@ -13,23 +13,52 @@ pub fn extract_inner_name(ty: &graphql_parser::query::Type) -> &str {
 }
 
 pub fn gql_type_to_json_type(gql_type: &graphql_parser::query::Type) -> quote::Tokens {
+    gql_type_to_json_type_inner(gql_type, false)
+}
+
+fn gql_type_to_json_type_inner(
+    gql_type: &graphql_parser::query::Type,
+    non_null: bool,
+) -> quote::Tokens {
     use graphql_parser::query::Type::*;
 
     match gql_type {
-        NamedType(name) => match name.as_str() {
-            "Boolean" => quote!(Option<bool>),
-            _ => {
-                let ident = Term::new(name, Span::call_site());
-                quote!(Option<#ident>)
+        NamedType(name) => {
+            let inner_name = match name.as_str() {
+                "Boolean" => quote!(bool),
+                "Int" => quote!(i32),
+                _ => {
+                    let ident = Term::new(name, Span::call_site());
+                    quote!(#ident)
+                }
+            };
+            if non_null {
+                inner_name
+            } else {
+                quote!(Option<#inner_name> )
             }
-        },
+        }
         ListType(inner) => {
-            let inner_converted = gql_type_to_json_type(&inner);
-            quote!(Vec<#inner_converted>)
+            let inner_converted = gql_type_to_json_type_inner(&inner, false);
+            if non_null {
+                quote!(Vec<#inner_converted>)
+            } else {
+                quote!(Option<Vec<#inner_converted>>)
+            }
         }
         NonNullType(inner) => {
-            let inner_converted = gql_type_to_json_type(&inner);
+            let inner_converted = gql_type_to_json_type_inner(&inner, true);
             quote!(#inner_converted)
         }
+    }
+}
+
+/// Correspondance function between a GraphQL scalar type name(Int, String...) and rust types
+pub fn correspondant_type(gql_type: &str) -> &str {
+    match gql_type {
+        "Int" => "i32",
+        "String" => "String",
+        "Double" => "f64",
+        other => other,
     }
 }

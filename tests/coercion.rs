@@ -99,3 +99,26 @@ fn wrong_argument_type_coercion() {
     let coerced = Schema::coerce(&query, &context);
     assert_eq!(coerced, Err(CoercionError));
 }
+
+#[test]
+fn int_argument_coercion() {
+    let query = r##"
+    query {
+        double(num: 4)
+    }
+    "##;
+    let context = tokio_gql::query_validation::ValidationContext::new();
+    let query = parse_query(query).unwrap();
+    let coerced = Schema::coerce(&query, &context);
+    assert_eq!(
+        coerced,
+        Ok(Schema {
+            query: vec![User::Double { num: 4 }],
+        })
+    )
+}
+
+#[test]
+fn input_type_argument_coercion() {
+    assert!(false)
+}
