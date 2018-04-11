@@ -24,18 +24,11 @@ fn gql_type_to_json_type_inner(
 
     match gql_type {
         NamedType(name) => {
-            let inner_name = match name.as_str() {
-                "Boolean" => quote!(bool),
-                "Int" => quote!(i32),
-                _ => {
-                    let ident = Term::new(name, Span::call_site());
-                    quote!(#ident)
-                }
-            };
+            let inner_name = Term::new(correspondant_type(name.as_str()), Span::call_site());
             if non_null {
-                inner_name
+                quote!(#inner_name)
             } else {
-                quote!(Option<#inner_name> )
+                quote!(Option<#inner_name>)
             }
         }
         ListType(inner) => {
@@ -59,6 +52,7 @@ pub fn correspondant_type(gql_type: &str) -> &str {
         "Int" => "i32",
         "String" => "String",
         "Double" => "f64",
+        "Boolean" => "bool",
         other => other,
     }
 }

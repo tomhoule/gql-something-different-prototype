@@ -22,7 +22,6 @@ use proc_macro2::{Literal, Span, Term};
 use std::fs::File;
 use std::io::prelude::*;
 
-use heck::{CamelCase, MixedCase};
 use proc_macro::TokenStream;
 
 #[proc_macro_derive(SomethingCompletelyDifferent, attributes(SomethingCompletelyDifferent))]
