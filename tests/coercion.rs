@@ -74,6 +74,7 @@ fn optional_argument_coercion() {
     )
 }
 
+/// We do not consider this as an error because that should be caught at the validation step.
 #[test]
 fn wrong_argument_name_coercion() {
     let query = r##"
@@ -84,7 +85,12 @@ fn wrong_argument_name_coercion() {
     let context = tokio_gql::query_validation::ValidationContext::new();
     let query = parse_query(query).unwrap();
     let coerced = Schema::coerce(&query, &context);
-    assert_eq!(coerced, Err(CoercionError));
+    assert_eq!(
+        coerced,
+        Ok(Schema {
+            query: vec![User::SayHello { name: None }],
+        })
+    );
 }
 
 #[test]
@@ -116,9 +122,4 @@ fn int_argument_coercion() {
             query: vec![User::Double { num: 4 }],
         })
     )
-}
-
-#[test]
-fn input_type_argument_coercion() {
-    assert!(false)
 }
