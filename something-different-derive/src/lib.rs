@@ -65,6 +65,8 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     for object_type in context.object_types.iter() {
         let name = Term::new(&object_type.name, Span::call_site());
         let field_matchers = object_type.fields.iter().map(|field| {
+            // we have to split this in two: required and optional arguments
+
             let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
             let argument_idents: Vec<Term> = field
@@ -99,7 +101,6 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 .map(|arg| shared::gql_type_to_json_type(&arg.value_type))
                 .collect();
             let field_type_name = shared::extract_inner_name(&field.field_type);
-            println!("field type name {:?}", field_type_name);
             let variant_constructor = if argument_idents.is_empty()
                 && context.is_scalar(field_type_name)
             {
@@ -113,6 +114,7 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
             } else {
                 quote!(#name::#variant_name { #(#argument_idents_clone),* })
             };
+
             let result = quote! {
                 if field.name == #variant_name_literal {
                     #(

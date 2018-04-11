@@ -51,6 +51,6 @@ where
     T: CoerceScalar,
 {
     fn coerce(value: &Value) -> Result<Option<T>, CoercionError> {
-        Ok(Some(T::coerce(value)?))
+        Ok(T::coerce(value).ok())
     }
 }
