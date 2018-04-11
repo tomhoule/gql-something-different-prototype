@@ -59,7 +59,7 @@ fn basic_argument_coercion() {
 fn optional_argument_coercion() {
     let query = r##"
     query {
-        sayHello
+        sayHello(name: null)
     }
     "##;
     let context = tokio_gql::query_validation::ValidationContext::new();

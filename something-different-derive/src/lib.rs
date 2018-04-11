@@ -79,7 +79,6 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 .iter()
                 .map(|arg| Literal::string(&arg.name))
                 .collect();
-            let argument_idents_clone = argument_idents.clone();
             let argument_types: Vec<quote::Tokens> = field
                 .arguments
                 .iter()
@@ -101,19 +100,13 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 .map(|arg| shared::gql_type_to_json_type(&arg.value_type))
                 .collect();
             let field_type_name = shared::extract_inner_name(&field.field_type);
-            let variant_constructor = if argument_idents.is_empty()
-                && context.is_scalar(field_type_name)
-            {
-                quote!(#name::#variant_name)
-            } else if !argument_idents.is_empty() && !context.is_scalar(field_type_name) {
-                let field_type = Term::new(field_type_name, Span::call_site());
-                quote!(#name::#variant_name { selection: <::tokio_gql::graphql_parser::schema::Value::#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(query, context), #(#argument_idents_clone),* })
-            } else if argument_idents.is_empty() {
-                let field_type = Term::new(field_type_name, Span::call_site());
-                quote!(#name::#variant_name { selection: <::tokio_gql::graphql_parser::schema::Value::#field_type as tokio_gql::coercion::CoerceSelection>::coerce(query, context) })
-            } else {
-                quote!(#name::#variant_name { #(#argument_idents_clone),* })
-            };
+            let variant_constructor = field_variant_constructor(
+                name,
+                variant_name,
+                &argument_idents,
+                field_type_name,
+                context,
+            );
 
             let result = quote! {
                 if field.name == #variant_name_literal {
@@ -341,12 +334,33 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
     }
 }
 
+fn field_variant_constructor(
+    field_name: Term,
+    variant_name: Term,
+    argument_idents: &[Term],
+    field_type_name: &str,
+    context: &DeriveContext,
+) -> quote::Tokens {
+    let argument_idents_clone = argument_idents.clone();
+    if argument_idents.is_empty() && context.is_scalar(field_type_name) {
+        quote!(#field_name::#variant_name)
+    } else if !argument_idents.is_empty() && !context.is_scalar(field_type_name) {
+        let field_type = Term::new(field_type_name, Span::call_site());
+        quote!(#field_name::#variant_name { selection: <::tokio_gql::graphql_parser::schema::Value::#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(query, context), #(#argument_idents_clone),* })
+    } else if argument_idents.is_empty() {
+        let field_type = Term::new(field_type_name, Span::call_site());
+        quote!(#field_name::#variant_name { selection: <::tokio_gql::graphql_parser::schema::Value::#field_type as tokio_gql::coercion::CoerceSelection>::coerce(query, context) })
+    } else {
+        quote!(#field_name::#variant_name { #(#argument_idents_clone),* })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use graphql_parser::schema::*;
-
     /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
+
     macro_rules! assert_expands_to {
         ($gql_string:expr => $expanded:tt) => {
             let gql = $gql_string;
