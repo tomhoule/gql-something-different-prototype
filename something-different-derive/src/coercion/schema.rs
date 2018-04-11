@@ -1,12 +1,9 @@
+use coercion::traits::*;
 use context::DeriveContext;
 use graphql_parser::schema::*;
 use heck::CamelCase;
 use proc_macro2::{Span, Term};
 use quote;
-
-pub trait ImplCoerce {
-    fn impl_coerce(&self, context: &DeriveContext) -> quote::Tokens;
-}
 
 impl ImplCoerce for SchemaDefinition {
     fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
