@@ -1,4 +1,4 @@
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 
 extern crate graphql_parser;
 extern crate heck;
@@ -216,13 +216,14 @@ fn impl_schema_coerce(
                                     <#field_values_clone as ::tokio_gql::coercion::CoerceSelection>::coerce(
                                         &definition.clone().selection_set,
                                         context,
-                                    ).expect("This should not panic, but return early with a CoercionError"))
+                                    )
+                                )
                             } else {
                                 None
                             }
                         })
                         .next()
-                        .unwrap();
+                        .ok_or(::tokio_gql::coercion::CoercionError)??;
                 )*
 
                 Ok(Schema {
