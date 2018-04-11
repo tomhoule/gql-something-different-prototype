@@ -8,6 +8,7 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+mod coercion;
 mod context;
 mod enums;
 mod inputs;
@@ -15,6 +16,7 @@ mod objects;
 mod shared;
 mod unions;
 
+use coercion::*;
 use context::DeriveContext;
 use proc_macro2::{Literal, Span, Term};
 use std::fs::File;
@@ -87,11 +89,9 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                         shared::extract_inner_name(&arg.value_type),
                         Span::call_site(),
                     );
-                    let result = quote! {
+                    quote! {
                         ::tokio_gql::graphql_parser::schema::Value::#variant
-                    };
-                    println!("result: {}", result);
-                    result
+                    }
                 })
                 .collect();
             let argument_rust_types: Vec<_> = field
@@ -108,7 +108,7 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                 context,
             );
 
-            let result = quote! {
+            quote! {
                 if field.name == #variant_name_literal {
                     #(
                         let #argument_idents = field
@@ -125,9 +125,7 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
                     )*
                     result.push(#variant_constructor)
                 }
-            };
-            println!("{}", result);
-            result
+            }
         });
         let implementation = quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name {
@@ -156,77 +154,14 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(implementation);
     }
 
-    coerce_impls.push(impl_schema_coerce(
-        &context.get_schema().expect("Schema is present"),
-        context,
-    ));
+    coerce_impls.push(
+        context
+            .get_schema()
+            .expect("Schema is present")
+            .impl_coerce(&context),
+    );
 
     coerce_impls
-}
-
-fn impl_schema_coerce(
-    schema: &graphql_parser::schema::SchemaDefinition,
-    _context: &DeriveContext,
-) -> quote::Tokens {
-    let mut field_values: Vec<Term> = Vec::new();
-    let mut field_names: Vec<Term> = Vec::new();
-
-    if let Some(ref name) = schema.query {
-        let name = Term::new(name.as_str(), Span::call_site());
-        field_values.push(name);
-        field_names.push(Term::new("query", Span::call_site()));
-    }
-
-    if let Some(ref name) = schema.mutation {
-        let name = Term::new(name.as_str(), Span::call_site());
-        field_values.push(name);
-        field_names.push(Term::new("mutation", Span::call_site()));
-    }
-
-    if let Some(ref name) = schema.subscription {
-        let name = Term::new(name.as_str(), Span::call_site());
-        field_values.push(name);
-        field_names.push(Term::new("subscription", Span::call_site()));
-    }
-
-    let node_types: Vec<Term> = field_names
-        .iter()
-        .map(|name| Term::new(&format!("{}", name).to_camel_case(), Span::call_site()))
-        .collect();
-    let field_names_2 = field_names.clone();
-    let field_values_clone = field_values.clone();
-
-    quote! {
-        impl ::tokio_gql::coercion::CoerceQueryDocument for Schema {
-            fn coerce(
-                document: &::tokio_gql::graphql_parser::query::Document,
-                context: &::tokio_gql::query_validation::ValidationContext
-            ) -> Result<Self, ::tokio_gql::coercion::CoercionError> {
-                #(
-                    let #field_names: Vec<#field_values> = document.definitions
-                        .iter()
-                        .filter_map(|op| {
-                            if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
-                                Some(
-                                    <#field_values_clone as ::tokio_gql::coercion::CoerceSelection>::coerce(
-                                        &definition.clone().selection_set,
-                                        context,
-                                    )
-                                )
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
-                        .ok_or(::tokio_gql::coercion::CoercionError)??;
-                )*
-
-                Ok(Schema {
-                    #(#field_names_2),*
-                })
-            }
-        }
-    }
 }
 
 fn extract_path(attributes: &[syn::Attribute]) -> Option<String> {
