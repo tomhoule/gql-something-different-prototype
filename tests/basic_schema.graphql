@@ -3,6 +3,8 @@ type User {
   greeting: String!
   sayHello(name: String): String
   double(num: Int!): Int!
+  allPrimes(nums: [Int]): Boolean!
+  compare(a: String, b: Int): String
 }
 
 schema {
