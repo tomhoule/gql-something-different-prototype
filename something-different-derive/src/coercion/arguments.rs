@@ -7,9 +7,35 @@ use proc_macro2::{Literal, Span, Term};
 use quote;
 use shared;
 
+pub struct AbstractField {
+    name: String,
+    field_type: Type,
+    arguments: Vec<InputValue>,
+}
+
+impl From<InputValue> for AbstractField {
+    fn from(input: InputValue) -> Self {
+        AbstractField {
+            name: input.name,
+            field_type: input.value_type,
+            arguments: vec![],
+        }
+    }
+}
+
+impl From<Field> for AbstractField {
+    fn from(field: Field) -> Self {
+        AbstractField {
+            name: field.name,
+            field_type: field.field_type,
+            arguments: field.arguments,
+        }
+    }
+}
+
 /// This is evaluated in the context of the ObjectType coercion impl. Please refer to that to understand where things come from.
 pub struct ArgumentsContext {
-    pub fields: Vec<Field>,
+    pub fields: Vec<AbstractField>,
     pub object_name: Term,
 }
 
@@ -30,16 +56,7 @@ impl ImplCoerce for ArgumentsContext {
             );
 
             let arguments_matchers = field.arguments.iter().map(|arg| {
-                let argument_type = {
-                    let inner_name = if shared::is_list_type(&arg.value_type) {
-                        "List"
-                    } else {
-                        shared::extract_inner_name(&arg.value_type)
-                    };
-                    println!("inner name for {:?} -> {:?}", arg.value_type, inner_name);
-                    let variant = Term::new(inner_name, Span::call_site());
-                    quote!(::tokio_gql::graphql_parser::schema::Value::#variant)
-                };
+                let argument_type = shared::value_variant_for_type(&arg.value_type, &context);
                 let term = Term::new(&arg.name.to_mixed_case(), Span::call_site());
                 let literal = Literal::string(&arg.name);
 
@@ -54,7 +71,7 @@ impl ImplCoerce for ArgumentsContext {
                             .find(|(name, _)| name == #literal)
                             .and_then(|(_, value)| {
                                 if let #argument_type(_) = value {
-                                    Some(<#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("Should be propagated as a coercionerror"))
+                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).ok()
                                 } else {
                                     None
                                 }
@@ -68,7 +85,7 @@ impl ImplCoerce for ArgumentsContext {
                             .find(|(name, _)| name == #literal)
                             .map(|(_, value)| {
                                 if let #argument_type(_) = value {
-                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("Should be propagated as a coercionerror")
+                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("Should be propagated as a CoercionError")
                                 } else {
                                     None
                                 }

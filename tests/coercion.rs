@@ -199,11 +199,60 @@ fn null_argument_coercion() {
 }
 
 #[test]
-fn optional_object_argument_coercion() {
-    unimplemented!()
+fn required_object_argument_coercion() {
+    test_coercion(
+        r##"
+        query {
+            isAGoodDog(dog: {
+                name: "Hachi",
+                weight: 12,
+                vaccinated: true
+            })
+        }
+        "##,
+        Ok(Schema {
+            query: vec![
+                User::IsAGoodDog {
+                    dog: Dog {
+                        name: "Hachi".to_string(),
+                        weight: 12,
+                        vaccinated: Some(true),
+                    },
+                },
+            ],
+        }),
+    )
 }
 
 #[test]
-fn required_object_argument_coercion() {
-    unimplemented!()
+fn optional_object_argument_coercion_with_null() {
+    test_coercion(
+        r##"
+        query {
+            petDog(dog: null)
+        }
+        "##,
+        Ok(Schema {
+            query: vec![User::PetDog { dog: None }],
+        }),
+    )
+}
+
+// TODO: test with composed names (with underscores, different case)
+
+#[test]
+fn optional_object_argument_coercion_with_value() {
+    test_coercion(
+        r##"
+        query {
+            petDog(dog: {
+                name: "Hachi",
+                weight: 12,
+            })
+        }
+        "##,
+        Ok(Schema {
+            query: vec![User::PetDog { dog: None }],
+        }),
+    )
 }

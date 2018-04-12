@@ -1,3 +1,9 @@
+input Dog {
+  name: String!
+  weight: Int!
+  vaccinated: Boolean
+}
+
 type User {
   lastName: String
   greeting: String!
@@ -6,6 +12,11 @@ type User {
   allPrimes(nums: [Int]): Boolean!
   winningNumbers(numbers: [Int!]!): Boolean!
   compare(a: String, b: Int): String
+  """
+  Always returns true
+  """
+  isAGoodDog(dog: Dog!): Boolean
+  petDog(dog: Dog): Int
 }
 
 schema {

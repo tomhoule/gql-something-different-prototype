@@ -1,15 +1,20 @@
 use context::DeriveContext;
 use graphql_parser::schema::InputObjectType;
-use heck::CamelCase;
 use proc_macro2::{Literal, Span, Term};
 use quote;
+use shared;
 
 pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -> quote::Tokens {
     let name = Term::new(&input_type.name, Span::call_site());
     let values: Vec<Term> = input_type
         .fields
         .iter()
-        .map(|v| Term::new(&v.name.to_camel_case(), Span::call_site()))
+        .map(|v| Term::new(&v.name, Span::call_site()))
+        .collect();
+    let types: Vec<_> = input_type
+        .fields
+        .iter()
+        .map(|v| shared::gql_type_to_json_type(&v.value_type))
         .collect();
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = input_type.description {
         let str_literal = Literal::string(&doc_string);
@@ -21,8 +26,8 @@ pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -
     quote!{
         #doc_attr
         #[derive(Debug, PartialEq)]
-        pub enum #name {
-            #(#values),* ,
+        pub struct #name {
+            #(#values: #types),* ,
         }
     }
 }
@@ -55,19 +60,19 @@ mod tests {
             A point in 2, 3 or 4 dimensions, because why not?
             """
             input Point {
-                X: Int!
-                Y: Int!
-                Z: Int!
-                ZZ: Int!
+                x: Int!
+                y: Int!
+                z: Int
+                zZ: Boolean!
             }
             "## => {
                 #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
                 #[derive(Debug, PartialEq)]
-                pub enum Point {
-                    X,
-                    Y,
-                    Z,
-                    Zz,
+                pub struct Point {
+                    x: i32,
+                    y: i32,
+                    z: Option<i32>,
+                    zZ: bool,
                 }
             }
         }

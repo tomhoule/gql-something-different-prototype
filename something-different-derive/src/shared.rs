@@ -1,3 +1,4 @@
+use context;
 use graphql_parser;
 use proc_macro2::{Span, Term};
 use quote;
@@ -66,6 +67,26 @@ pub fn is_list_type(gql_type: &graphql_parser::query::Type) -> bool {
         Type::NonNullType(inner) => is_list_type(inner),
         Type::ListType(_) => true,
     }
+}
+
+/// The variant to extract for that type
+pub fn value_variant_for_type(
+    value_type: &graphql_parser::schema::Type,
+    context: &context::DeriveContext,
+) -> quote::Tokens {
+    let inner_name = if is_list_type(&value_type) {
+        "List"
+    } else {
+        let name = extract_inner_name(&value_type);
+
+        if context.is_scalar(name) {
+            name
+        } else {
+            "Object"
+        }
+    };
+    let variant = Term::new(inner_name, Span::call_site());
+    quote!(::tokio_gql::graphql_parser::schema::Value::#variant)
 }
 
 #[cfg(test)]

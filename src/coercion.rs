@@ -46,6 +46,15 @@ impl CoerceScalar for i32 {
     }
 }
 
+impl CoerceScalar for bool {
+    fn coerce(value: &Value) -> Result<bool, CoercionError> {
+        match value {
+            Value::Boolean(b) => Ok(*b),
+            _ => Err(CoercionError),
+        }
+    }
+}
+
 impl<T> CoerceScalar for Option<T>
 where
     T: CoerceScalar,

@@ -9,7 +9,7 @@ impl ImplCoerce for ObjectType {
     fn impl_coerce(&self, context: &DeriveContext) -> quote::Tokens {
         let name = Term::new(&self.name, Span::call_site());
         let field_matchers = ArgumentsContext {
-            fields: self.fields.clone(),
+            fields: self.fields.iter().map(|i| i.clone().into()).collect(),
             object_name: Term::new(&self.name, Span::call_site()),
         }.impl_coerce(context);
 
