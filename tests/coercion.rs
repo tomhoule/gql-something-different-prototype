@@ -186,7 +186,16 @@ fn optional_list_of_optional_elements_argument_coercion() {
 
 #[test]
 fn null_argument_coercion() {
-    unimplemented!()
+    test_coercion(
+        r##"
+        query {
+            sayHello(name: null)
+        }
+        "##,
+        Ok(Schema {
+            query: vec![User::SayHello { name: None }],
+        }),
+    )
 }
 
 #[test]
@@ -195,4 +204,6 @@ fn optional_object_argument_coercion() {
 }
 
 #[test]
-fn required_object_argument_coercion() {}
+fn required_object_argument_coercion() {
+    unimplemented!()
+}
