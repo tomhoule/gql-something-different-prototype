@@ -54,3 +54,15 @@ where
         Ok(T::coerce(value).ok())
     }
 }
+
+impl<T> CoerceScalar for Vec<T>
+where
+    T: CoerceScalar,
+{
+    fn coerce(value: &Value) -> Result<Vec<T>, CoercionError> {
+        match value {
+            Value::List(elems) => elems.iter().map(T::coerce).collect(),
+            _ => Err(CoercionError),
+        }
+    }
+}

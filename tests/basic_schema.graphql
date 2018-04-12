@@ -4,6 +4,7 @@ type User {
   sayHello(name: String): String
   double(num: Int!): Int!
   allPrimes(nums: [Int]): Boolean!
+  winningNumbers(numbers: [Int!]!): Boolean!
   compare(a: String, b: Int): String
 }
 

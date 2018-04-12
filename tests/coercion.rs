@@ -52,40 +52,49 @@ fn basic_argument_coercion() {
 }
 
 #[test]
-fn optional_argument_coercion() {
-    let query = r##"
+fn optional_argument_coercion_none() {
+    test_coercion(
+        r##"
     query {
         sayHello(name: null)
     }
-    "##;
-    let context = tokio_gql::query_validation::ValidationContext::new();
-    let query = parse_query(query).unwrap();
-    let coerced = Schema::coerce(&query, &context);
-
-    assert_eq!(
-        coerced,
+    "##,
         Ok(Schema {
             query: vec![User::SayHello { name: None }],
-        })
-    )
+        }),
+    );
+}
+
+#[test]
+fn optional_argument_coercion_some() {
+    test_coercion(
+        r##"
+    query {
+        sayHello(name: "Pikachu")
+    }
+    "##,
+        Ok(Schema {
+            query: vec![
+                User::SayHello {
+                    name: Some("Pikachu".to_string()),
+                },
+            ],
+        }),
+    );
 }
 
 /// We do not consider this as an error because that should be caught at the validation step.
 #[test]
 fn wrong_argument_name_coercion() {
-    let query = r##"
+    test_coercion(
+        r##"
     query {
         sayHello(name: 33)
     }
-    "##;
-    let context = tokio_gql::query_validation::ValidationContext::new();
-    let query = parse_query(query).unwrap();
-    let coerced = Schema::coerce(&query, &context);
-    assert_eq!(
-        coerced,
+    "##,
         Ok(Schema {
             query: vec![User::SayHello { name: None }],
-        })
+        }),
     );
 }
 
@@ -123,24 +132,55 @@ fn int_argument_coercion() {
 #[test]
 fn multiple_arguments_coercion() {
     test_coercion(
-        r###""
+        r###"
         query {
             compare(a: "fourty odd", b: 44)
         }
         "###,
-        Ok(Schema { query: vec![] }),
+        Ok(Schema {
+            query: vec![
+                User::Compare {
+                    a: Some("fourty odd".to_string()),
+                    b: Some(44),
+                },
+            ],
+        }),
     );
 }
 
 #[test]
-fn list_argument_coercion() {
+fn required_list_of_required_elements_argument_coercion() {
     test_coercion(
-        r###""
+        r###"
+        query {
+            winningNumbers(numbers: [5, 25, 100])
+        }
+        "###,
+        Ok(Schema {
+            query: vec![
+                User::WinningNumbers {
+                    numbers: vec![5, 25, 100],
+                },
+            ],
+        }),
+    )
+}
+
+#[test]
+fn optional_list_of_optional_elements_argument_coercion() {
+    test_coercion(
+        r###"
         query {
             allPrimes(nums: [3, 8, 0, -22])
         }
         "###,
-        Ok(Schema { query: vec![] }),
+        Ok(Schema {
+            query: vec![
+                User::AllPrimes {
+                    nums: Some(vec![Some(3), Some(8), Some(0), Some(-22)]),
+                },
+            ],
+        }),
     );
 }
 

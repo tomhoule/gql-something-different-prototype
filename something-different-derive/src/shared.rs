@@ -56,3 +56,36 @@ pub fn correspondant_type(gql_type: &str) -> &str {
         other => other,
     }
 }
+
+/// Will return true for nullable and non-nullable list types
+pub fn is_list_type(gql_type: &graphql_parser::query::Type) -> bool {
+    use graphql_parser::query::Type;
+
+    match gql_type {
+        Type::NamedType(_) => false,
+        Type::NonNullType(inner) => is_list_type(inner),
+        Type::ListType(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_list_type_works() {
+        use graphql_parser::query::Type;
+
+        assert!(is_list_type(&Type::ListType(Box::new(Type::NamedType(
+            "meow".to_string()
+        )))));
+
+        assert!(is_list_type(&Type::NonNullType(Box::new(Type::ListType(
+            Box::new(Type::NamedType("meow".to_string()))
+        )))));
+
+        assert!(!is_list_type(&Type::NonNullType(Box::new(
+            Type::NamedType("meow".to_string())
+        ))));
+    }
+}

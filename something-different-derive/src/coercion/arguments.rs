@@ -31,15 +31,16 @@ impl ImplCoerce for ArgumentsContext {
 
             let arguments_matchers = field.arguments.iter().map(|arg| {
                 let argument_type = {
-                    let variant = Term::new(
-                        shared::extract_inner_name(&arg.value_type),
-                        Span::call_site(),
-                    );
+                    let inner_name = if shared::is_list_type(&arg.value_type) {
+                        "List"
+                    } else {
+                        shared::extract_inner_name(&arg.value_type)
+                    };
+                    println!("inner name for {:?} -> {:?}", arg.value_type, inner_name);
+                    let variant = Term::new(inner_name, Span::call_site());
                     quote!(::tokio_gql::graphql_parser::schema::Value::#variant)
                 };
                 let term = Term::new(&arg.name.to_mixed_case(), Span::call_site());
-
-                let rust_type = shared::gql_type_to_json_type(&arg.value_type);
                 let literal = Literal::string(&arg.name);
 
                 let coercion_target = resolve_coercion_target(&arg.value_type);
@@ -117,6 +118,7 @@ fn field_variant_constructor(
 struct CoercionTarget {
     /// Whether this is optional *at the top level*. This is used when implementing the extractor.
     optional: bool,
+    /// The *rust* type name of the target.
     type_name: quote::Tokens,
 }
 
@@ -143,10 +145,13 @@ fn resolve_coercion_target_inner(
                 },
             }
         }
-        Type::NonNullType(inner) => CoercionTarget {
-            optional: false,
-            type_name: resolve_coercion_target_inner(inner, false).type_name,
-        },
+        Type::NonNullType(inner) => {
+            let CoercionTarget { type_name, .. } = resolve_coercion_target_inner(inner, false);
+            CoercionTarget {
+                optional: false,
+                type_name,
+            }
+        }
         Type::NamedType(inner) => {
             let term_inner = Term::new(shared::correspondant_type(inner), Span::call_site());
             CoercionTarget {
@@ -206,12 +211,21 @@ mod tests {
         );
 
         test!(
+            Type::NonNullType(Box::new(Type::ListType(Box::new(Type::NonNullType(Box::new(Type::NamedType("Cat".to_string())))))))
+            =>
+            CoercionTarget {
+                optional: false,
+                type_name: quote!(Vec<Cat>),
+            }
+        );
+
+        test!(
             Type::ListType(Box::new(Type::NamedType("Int".to_string())))
             =>
             CoercionTarget {
                 optional: true,
                 type_name: quote!(Option<Vec<Option<i32> >>)
             }
-        )
+        );
     }
 }
