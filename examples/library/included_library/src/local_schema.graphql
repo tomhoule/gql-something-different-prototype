@@ -1,3 +1,7 @@
 type Query {
   say_hello(name: String): String!
 }
+
+schema {
+  query: Query
+}
