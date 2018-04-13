@@ -198,33 +198,33 @@ fn null_argument_coercion() {
     )
 }
 
-// TODO: fix this
-// #[test]
-// fn required_object_argument_coercion() {
-//     test_coercion(
-//         r##"
-//         query {
-//             isAGoodDog(dog: {
-//                 name: "Hachi",
-//                 weight: 12,
-//                 vaccinated: true
-//             })
-//         }
-//         "##,
-//         Ok(Schema {
-//             query: vec![
-//                 User::IsAGoodDog {
-//                     dog: Dog {
-//                         name: "Hachi".to_string(),
-//                         weight: 12,
-//                         vaccinated: Some(true),
-//                         has_chip: None,
-//                     },
-//                 },
-//             ],
-//         }),
-//     )
-// }
+#[test]
+fn required_object_argument_coercion() {
+    test_coercion(
+        r##"
+        query {
+            isAGoodDog(dog: {
+                name: "Hachi",
+                weight: 12,
+                has_chip: true,
+                vaccinated: true,
+            })
+        }
+        "##,
+        Ok(Schema {
+            query: vec![
+                User::IsAGoodDog {
+                    dog: Dog {
+                        name: "Hachi".to_string(),
+                        weight: 12,
+                        vaccinated: Some(true),
+                        has_chip: Some(true),
+                    },
+                },
+            ],
+        }),
+    )
+}
 
 #[test]
 fn optional_object_argument_coercion_with_null() {
@@ -249,42 +249,47 @@ fn arguments_with_composed_names() {
             petDog(dog: {
                 name: "Hachi",
                 weight: 12,
-                has_chip: false
+                has_chip: false,
             })
         }
         "##,
         Ok(Schema {
-            query: vec![User::PetDog { dog: None }],
+            query: vec![User::PetDog { dog: Some(Dog {
+                name: "Hachi".to_string(),
+                weight: 12,
+                has_chip: Some(false),
+                vaccinated: None,
+            }) }],
         }),
     )
 }
 
-// TODO: fix this
-// #[test]
-// fn optional_object_argument_coercion_with_value() {
-//     test_coercion(
-//         r##"
-//         query {
-//             petDog(dog: {
-//                 name: "Hachi",
-//                 weight: 12,
-//             })
-//         }
-//         "##,
-//         Ok(Schema {
-//             query: vec![
-//                 User::PetDog {
-//                     dog: Some(Dog {
-//                         name: "Hachi".to_string(),
-//                         weight: 12,
-//                         vaccinated: None,
-//                         has_chip: Some(true),
-//                     }),
-//                 },
-//             ],
-//         }),
-//     )
-// }
+#[test]
+fn optional_object_argument_coercion_with_value() {
+    test_coercion(
+        r##"
+        query {
+            petDog(dog: {
+                name: "Hachi",
+                weight: 12,
+                vaccinated: true,
+            })
+        }
+        "##,
+        Ok(Schema {
+            query: vec![
+                User::PetDog {
+                    dog: Some(Dog {
+                        name: "Hachi".to_string(),
+                        weight: 12,
+                        vaccinated: Some(true),
+                        has_chip: None,
+                    }),
+                },
+            ],
+        }),
+    )
+}
 
 #[test]
 fn field_returning_object() {

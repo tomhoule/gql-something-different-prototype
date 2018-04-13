@@ -1,8 +1,8 @@
 input Dog {
   name: String!
   weight: Int!
-  vaccinated: Boolean
   has_chip: Boolean
+  vaccinated: Boolean
 }
 
 type Email {
