@@ -2,6 +2,12 @@ input Dog {
   name: String!
   weight: Int!
   vaccinated: Boolean
+  has_chip: Boolean
+}
+
+type Email {
+  subject: String
+  attachments_contain_dog_photos: Boolean!
 }
 
 type User {
@@ -17,6 +23,7 @@ type User {
   """
   isAGoodDog(dog: Dog!): Boolean
   petDog(dog: Dog): Int
+  getInbox(index: Int): Email
 }
 
 schema {
