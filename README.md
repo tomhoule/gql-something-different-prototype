@@ -95,6 +95,7 @@ tokio-gql will perform validation and make sure the shape of the response matche
 * You do get a strongly typed request that is easy to work with
 * Unit tests can easily catch faulty resolvers (see the [How to test this](#how-to-test-this) section)
 * [Pruning](#pruning) ensures that either the response will have the same shape as the request, or the server will return an error
+* The response builder helps you navigate the query tree, dealing with optional values and field names (examples and more details in the docs).
 
 ## How to test this
 
@@ -140,4 +141,4 @@ TODO: inject supported directives as definitions inside the schema string consta
 
 ## Other: authentication
 
-In the same query by ensuring the auth mutation is handled first (like Sangria, but better).
+In the same query by ensuring the auth mutation is handled first (like Sangria, but more flexible).
