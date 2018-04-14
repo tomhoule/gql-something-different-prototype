@@ -231,7 +231,7 @@ fn validate_argument_types(
                 ::shared::extract_inner_name(&schema_argument.value_type) == "String"
             }
             // TODO: implement input object literals validation
-            Value::Object(obj) => true,
+            Value::Object(_obj) => true,
             Value::Variable(_) => unimplemented!("Variable validation"),
             Value::Enum(_) => unimplemented!("Enum validation"),
             Value::Null | Value::List(_) => true,

@@ -21,7 +21,8 @@ impl<'a, T: PathFragment> PathFragment for &'a T {
 
 pub struct Response<Error> {
     _err: ::std::marker::PhantomData<Error>,
-    data_fields: Vec<Box<Future<Item = json::Value, Error = Error>>>,
+    deferred_fields: Vec<Box<Future<Item = json::Value, Error = Error>>>,
+    resolved_fields: HashMap<String, json::Value>,
     path: Vec<&'static str>,
 }
 
@@ -33,26 +34,13 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
     pub fn create(prefix: &[&'static str]) -> Response<Error> {
         Response {
             _err: ::std::marker::PhantomData,
-            data_fields: Vec::new(),
+            deferred_fields: Vec::new(),
+            resolved_fields: HashMap::new(),
             path: prefix.to_owned(),
         }
     }
 
     pub fn on<T: PathFragment, F: IntoFuture<Item = json::Value, Error = Error> + 'static>(
-        mut self,
-        field: T,
-        handler: impl Fn(&T, Response<Error>) -> F,
-    ) -> Self {
-        let path_suffix = field.as_path_fragment();
-        let mut full_path = self.path.clone();
-        full_path.push(path_suffix);
-        self.data_fields.push(Box::new(
-            handler(&field, Response::create(&full_path)).into_future(),
-        ));
-        self
-    }
-
-    pub fn maybe_on<T: PathFragment, F: IntoFuture<Item = json::Value, Error = Error> + 'static>(
         mut self,
         field: Option<T>,
         handler: impl Fn(&T, Response<Error>) -> F,
@@ -61,7 +49,7 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
             let path_suffix = field.as_path_fragment();
             let mut full_path = self.path.clone();
             full_path.push(path_suffix);
-            self.data_fields.push(Box::new(
+            self.deferred_fields.push(Box::new(
                 handler(&field, Response::create(&full_path))
                     .into_future()
                     .map(move |res| json!({ path_suffix: res })),
@@ -70,29 +58,60 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
         self
     }
 
-    pub fn merge(mut self, value: json::Value) -> Self {
-        self.data_fields
-            .push(Box::new(::futures::future::ok(value)));
+    /// Passing all fields to `on_each` should be avoided unless all of them are asynchronous, since this allocates (to store the resulting future). Values that are not futures should go through `merge`.
+    ///
+    // TODO: should the handler return a Future instead so it's harder to use this wrong?
+    pub fn on_each<T: PathFragment, F: IntoFuture<Item = json::Value, Error = Error> + 'static>(
+        mut self,
+        fields: impl Iterator<Item = T>,
+        handler: impl Fn(&T, Response<Error>) -> F,
+    ) -> Self {
+        for field in fields {
+            let path_suffix = field.as_path_fragment();
+            println!("path suffix: {:?}", path_suffix);
+            let mut full_path = self.path.clone();
+            full_path.push(path_suffix);
+            self.deferred_fields.push(Box::new(
+                handler(&field, Response::create(&full_path))
+                    .into_future()
+                    .map(move |res| json!({ path_suffix: res })),
+            ));
+        }
         self
     }
 
+    /// Sets the value on `key` at the current path in the response tree.
+    pub fn set(mut self, key: &str, value: json::Value) -> Self {
+        self.resolved_fields.insert(key.to_string(), value);
+        self
+    }
+
+    /// Merge a value at the current path in the response tree. The value must be a `serde_json::Value::Object` or it will be ignored.
+    pub fn merge(mut self, value: json::Value) -> Self {
+        if let json::Value::Object(map) = value {
+            self.resolved_fields.extend(map)
+        }
+        self
+    }
+
+    /// Combines all the resolved and deferred fields and returns a future, so this can be used as a member field higher up in the response tree.
+    ///
+    /// This can become an `IntoFuture` impl once the impl Trait in traits feature is implemented and stabilized.
     pub fn resolve(self) -> impl Future<Item = json::Value, Error = Error> {
         let Response {
-            path, data_fields, ..
+            deferred_fields,
+            mut resolved_fields,
+            ..
         } = self;
 
-        ::futures::future::join_all(data_fields).and_then(move |data_fields| {
-            let mut data_map = HashMap::new();
-
-            for field in data_fields.iter() {
+        ::futures::future::join_all(deferred_fields).and_then(move |deferred_fields| {
+            for field in deferred_fields.into_iter() {
                 if let json::Value::Object(map) = field {
-                    data_map.extend(map.iter())
+                    resolved_fields.extend(map)
                 }
             }
 
-            let key: &'static str = path[path.len() - 1];
-
-            Ok(json!({ key: data_map }))
+            Ok(json::to_value(&resolved_fields).expect("the response map is valid JSON"))
         })
     }
 }
@@ -116,6 +135,7 @@ mod tests {
         Name,
         Age,
         Fluffiness,
+        FetchBall,
         Skills { selection: Vec<DogSkills> },
     }
 
@@ -135,6 +155,7 @@ mod tests {
             match self {
                 Dog::Name => "name",
                 Dog::Age => "age",
+                Dog::FetchBall => "fetch_ball",
                 Dog::Fluffiness => "fluffiness",
                 Dog::Skills { .. } => "skills",
             }
@@ -153,7 +174,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     struct Error;
 
-    fn resolve_query_root(q: &SomeField, res: Response<Error>) -> Result<json::Value, Error> {
+    fn resolve_query_root(_q: &SomeField, _res: Response<Error>) -> Result<json::Value, Error> {
         Ok(json!({ "weight": 4 }))
     }
 
@@ -162,11 +183,11 @@ mod tests {
         let cats_request = SomeField::Cats {
             name: "Leopold".to_string(),
         };
-        let response = Response::<Error>::new().on(cats_request, resolve_query_root);
+        let response = Response::<Error>::new().on(Some(cats_request), resolve_query_root);
 
         assert_eq!(
             ::futures::executor::block_on(response.resolve()).unwrap(),
-            json!({ "data": { "weight": 4 } })
+            json!({ "cats": { "weight": 4 } })
         );
     }
 
@@ -175,13 +196,27 @@ mod tests {
         let cats_request = SomeField::Cats {
             name: "Leopold".to_string(),
         };
-        let response = Response::<Error>::new().on(cats_request, |_req, _res| {
+        let response = Response::<Error>::new().on(Some(cats_request), |_req, _res| {
             ::futures::future::ok(json!({ "weight": 5 } ))
         });
 
         let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
 
-        assert_eq!(resolved, json!({ "data": { "weight": 5 } }));
+        assert_eq!(resolved, json!({ "cats": { "weight": 5 } }));
+    }
+
+    #[test]
+    fn response_set_works() {
+        let cats_request = SomeField::Cats {
+            name: "Leopold".to_string(),
+        };
+        let response = Response::<Error>::new().on(Some(cats_request), |_req, res| {
+            res.set("whiskers", json!(9000)).resolve()
+        });
+
+        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+
+        assert_eq!(resolved, json!({ "cats": { "whiskers": 9000 } }));
     }
 
     #[test]
@@ -197,7 +232,7 @@ mod tests {
             puppies_only: false,
         };
 
-        let response = Response::<Error>::new().on(dogs_request, |req, res| match req {
+        let response = Response::<Error>::new().on(Some(dogs_request), |req, res| match req {
             SomeField::Dogs { selection, .. } => {
                 let default_response = json!({
                     "name": "Laika",
@@ -207,16 +242,10 @@ mod tests {
 
                 let skills_field = selection
                     .iter()
-                    .filter_map(|dog| {
-                        if let Dog::Skills { .. } = dog {
-                            Some(dog)
-                        } else {
-                            None
-                        }
-                    })
+                    .filter(|dog| matches!(dog, Dog::Skills { .. }))
                     .next();
 
-                res.maybe_on(skills_field, |req, res| {
+                res.on(skills_field, |_req, _res| {
                     Ok(json!({ "can_jump": true, "can_sit": true }))
                 }).merge(default_response)
                     .resolve()
@@ -229,13 +258,54 @@ mod tests {
         assert_eq!(
             resolved,
             json!({
-                "data": {
-                    "dogs": {
-                        "name": "Laika",
-                        "age": 2,
-                        "unrelated_field": [3, 4, 5],
-                        "skills": { "can_jump": true, "can_sit": true },
-                    }
+                "dogs": {
+                    "name": "Laika",
+                    "age": 2,
+                    "unrelated_field": [3, 4, 5],
+                    "skills": { "can_jump": true, "can_sit": true },
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn multi_field_nested_response() {
+        let dogs_request = SomeField::Dogs {
+            selection: vec![
+                Dog::Name,
+                Dog::Fluffiness,
+                Dog::FetchBall,
+                Dog::Skills {
+                    selection: vec![DogSkills::CanJump],
+                },
+            ],
+            puppies_only: false,
+        };
+
+        let response = Response::<Error>::new().on(Some(dogs_request), |req, res| match req {
+            SomeField::Dogs { selection, .. } => {
+                let deferred_fields = selection.iter().filter(|dog| match dog {
+                    Dog::Skills { .. } | Dog::FetchBall => true,
+                    _ => false,
+                });
+
+                res.on_each(deferred_fields, |req, _res| match req {
+                    Dog::Skills { .. } => Ok(json!({ "can_sit": true })),
+                    Dog::FetchBall => Ok(json!("doing a bamboozle")),
+                    _ => unreachable!(),
+                }).resolve()
+            }
+            SomeField::Cats { .. } => unimplemented!(),
+        });
+
+        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+
+        assert_eq!(
+            resolved,
+            json!({
+                "dogs": {
+                    "skills": { "can_sit": true },
+                    "fetch_ball": "doing a bamboozle"
                 }
             })
         );
