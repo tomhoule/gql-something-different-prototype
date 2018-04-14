@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate tokio_gql;
-#[macro_use]
 extern crate serde_json;
 
 extern crate graphql_parser;
@@ -8,6 +7,7 @@ use graphql_parser::query::*;
 
 use tokio_gql::coercion::*;
 
+#[allow(dead_code)]
 #[derive(SomethingCompletelyDifferent)]
 #[SomethingCompletelyDifferent(path = "tests/basic_schema.graphql")]
 struct BasicSchema;
@@ -254,12 +254,16 @@ fn arguments_with_composed_names() {
         }
         "##,
         Ok(Schema {
-            query: vec![User::PetDog { dog: Some(Dog {
-                name: "Hachi".to_string(),
-                weight: 12,
-                has_chip: Some(false),
-                vaccinated: None,
-            }) }],
+            query: vec![
+                User::PetDog {
+                    dog: Some(Dog {
+                        name: "Hachi".to_string(),
+                        weight: 12,
+                        has_chip: Some(false),
+                        vaccinated: None,
+                    }),
+                },
+            ],
         }),
     )
 }

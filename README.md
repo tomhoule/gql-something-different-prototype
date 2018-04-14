@@ -99,6 +99,8 @@ tokio-gql will perform validation and make sure the shape of the response matche
 
 ## How to test this
 
+TODO: write this
+
 ## Error handling
 
 Still has to be figured out. We do want a custom error type for resolvers. There may be more than one error type. We do want localized and global error-handling. Currently investigating how other implementations do it, like [Sangria](http://sangria-graphql.org/learn/#error-handling).

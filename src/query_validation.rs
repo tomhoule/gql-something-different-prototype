@@ -104,7 +104,7 @@ pub fn validate_query(
                         })
                     }
                 },
-                OperationDefinition::SelectionSet(q) => {
+                OperationDefinition::SelectionSet(_) => {
                     return Err(QueryValidationError::InvalidOperation {
                         operation: "selection set",
                     })

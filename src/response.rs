@@ -101,6 +101,7 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     #[derive(Debug, PartialEq)]
     enum DogSkills {
         CanJump,
@@ -109,6 +110,7 @@ mod tests {
         CanSit,
     }
 
+    #[allow(dead_code)]
     #[derive(Debug, PartialEq)]
     enum Dog {
         Name,
@@ -196,10 +198,7 @@ mod tests {
         };
 
         let response = Response::<Error>::new().on(dogs_request, |req, res| match req {
-            SomeField::Dogs {
-                selection,
-                puppies_only,
-            } => {
+            SomeField::Dogs { selection, .. } => {
                 let default_response = json!({
                     "name": "Laika",
                     "age": 2,
@@ -222,7 +221,7 @@ mod tests {
                 }).merge(default_response)
                     .resolve()
             }
-            SomeField::Cats { name } => unimplemented!(),
+            SomeField::Cats { .. } => unimplemented!(),
         });
 
         let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
