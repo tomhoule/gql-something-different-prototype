@@ -1,4 +1,3 @@
-use coercion::arguments::ArgumentsContext;
 use coercion::traits::*;
 use context::DeriveContext;
 use graphql_parser::schema::*;
@@ -62,8 +61,6 @@ impl ImplCoerce for InputObjectType {
             let fields = field_name_terms.clone();
             quote!(#name { #(#fields),* })
         };
-
-        let field_name_literals_clone = field_name_literals.clone();
 
         quote! {
             impl ::tokio_gql::coercion::CoerceScalar for #name {
