@@ -160,7 +160,7 @@ mod tests {
         let cats_request = SomeField::Cats {
             name: "Leopold".to_string(),
         };
-        let mut response = Response::<Error>::new().on(cats_request, resolve_query_root);
+        let response = Response::<Error>::new().on(cats_request, resolve_query_root);
 
         assert_eq!(
             ::futures::executor::block_on(response.resolve()).unwrap(),
@@ -173,7 +173,7 @@ mod tests {
         let cats_request = SomeField::Cats {
             name: "Leopold".to_string(),
         };
-        let mut response = Response::<Error>::new().on(cats_request, |_req, _res| {
+        let response = Response::<Error>::new().on(cats_request, |_req, _res| {
             ::futures::future::ok(json!({ "weight": 5 } ))
         });
 
