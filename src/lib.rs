@@ -1,6 +1,10 @@
+#[macro_use]
+extern crate failure;
 extern crate futures;
 extern crate serde;
 extern crate serde_json as json;
+
+pub extern crate graphql_parser;
 
 pub mod coercion;
 pub mod identifiable;
@@ -14,12 +18,10 @@ pub use something_different_derive::*;
 use futures::prelude::*;
 
 use serde::Serialize;
-use std::collections::HashMap;
 
 // Find the Query type
 // For each field, generate either a prefixed type or a module (maybe more a module?)
 //
-extern crate graphql_parser;
 
 use graphql_parser::query;
 use identifiable::Identifiable;
@@ -97,38 +99,31 @@ impl<Error> ResponseNode<Error> {
 //   recipes: some_computation_returning_a_future()
 // })
 
-enum QueryValidationError {
-    InvalidSelectionSet(query::SelectionSet),
-    UnknownDirective(query::Directive),
-    InvalidField { got: String, expected: &'static str },
-    InvalidFieldArguments,
-}
+// trait FromQueryField: Sized {
+//     /// Tuple of input types, most of the time
+//     type Arguments: FromQueryArguments;
 
-trait FromQueryField: Sized {
-    /// Tuple of input types, most of the time
-    type Arguments: FromQueryArguments;
+//     fn from_query_field(field: query::Field) -> Result<Self, QueryValidationError>;
+// }
 
-    fn from_query_field(field: query::Field) -> Result<Self, QueryValidationError>;
-}
+// trait FromQueryArguments: Sized {
+//     fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError>;
+// }
 
-trait FromQueryArguments: Sized {
-    fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError>;
-}
+// impl FromQueryArguments for () {
+//     fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError> {
+//         Ok(())
+//     }
+// }
 
-impl FromQueryArguments for () {
-    fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError> {
-        Ok(())
-    }
-}
-
-impl<T1, T2> FromQueryArguments for (T1, T2)
-where
-    T1: FromQueryArguments,
-    T2: FromQueryArguments,
-{
-    fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError> {
-        let a1 = T1::from_arguments(args)?;
-        let a2 = T2::from_arguments(args)?;
-        Ok((a1, a2))
-    }
-}
+// impl<T1, T2> FromQueryArguments for (T1, T2)
+// where
+//     T1: FromQueryArguments,
+//     T2: FromQueryArguments,
+// {
+//     fn from_arguments(args: &[(String, query::Value)]) -> Result<Self, QueryValidationError> {
+//         let a1 = T1::from_arguments(args)?;
+//         let a2 = T2::from_arguments(args)?;
+//         Ok((a1, a2))
+//     }
+// }

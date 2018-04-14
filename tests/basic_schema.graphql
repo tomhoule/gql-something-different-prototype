@@ -1,6 +1,29 @@
+input Dog {
+  name: String!
+  weight: Int!
+  has_chip: Boolean
+  vaccinated: Boolean
+}
+
+type Email {
+  subject: String
+  attachments_contain_dog_photos: Boolean!
+}
+
 type User {
   lastName: String
   greeting: String!
+  sayHello(name: String): String
+  double(num: Int!): Int!
+  allPrimes(nums: [Int]): Boolean!
+  winningNumbers(numbers: [Int!]!): Boolean!
+  compare(a: String, b: Int): String
+  """
+  Always returns true
+  """
+  isAGoodDog(dog: Dog!): Boolean
+  petDog(dog: Dog): Int
+  getInbox(index: Int): Email
 }
 
 schema {

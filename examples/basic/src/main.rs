@@ -1,5 +1,3 @@
-extern crate graphql_parser;
-
 #[macro_use]
 extern crate tokio_gql;
 
@@ -8,5 +6,5 @@ extern crate tokio_gql;
 struct MySchema;
 
 fn main() {
-    println!("Schema: {}", THE_SCHEMA);
+    println!("Schema:\n\n {}", THE_SCHEMA);
 }

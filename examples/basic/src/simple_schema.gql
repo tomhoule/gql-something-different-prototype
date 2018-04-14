@@ -13,3 +13,7 @@ type Query {
   pizzas: [Pizza!]
   pasta(by_sauce: String): [Pasta!]
 }
+
+schema {
+  query: Query
+}
