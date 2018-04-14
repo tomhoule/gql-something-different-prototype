@@ -34,12 +34,14 @@ impl ValidationContext {
 pub enum QueryValidationError {
     #[fail(display = "Invalid selection set")]
     InvalidSelectionSet(SelectionSet),
-    #[fail(display = "Unknown directive")]
-    UnknownDirective(Directive),
+    #[fail(display = "Unknown directive {}", directive)]
+    UnknownDirective { directive: Directive },
     #[fail(display = "Invalid field")]
     InvalidField,
     #[fail(display = "Invalid field arguments")]
     InvalidFieldArguments,
+    #[fail(display = "This operation is not defined for the schema: {}", operation)]
+    InvalidOperation { operation: &'static str },
     #[fail(display = "Other error (if you see this it is a bug, a report would be very appreciated)")]
     Other,
 }
@@ -73,7 +75,9 @@ pub fn validate_query(
                             .ok_or(QueryValidationError::InvalidField)?
                             .validate_selection_set(&q.selection_set)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation { operation: "query" })
+                    }
                 },
                 OperationDefinition::Mutation(ref m) => match &schema_definition.mutation {
                     Some(name) => {
@@ -82,7 +86,11 @@ pub fn validate_query(
                             .ok_or(QueryValidationError::InvalidField)?
                             .validate_selection_set(&m.selection_set)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation {
+                            operation: "mutation",
+                        })
+                    }
                 },
                 OperationDefinition::Subscription(s) => match &schema_definition.subscription {
                     Some(name) => {
@@ -91,9 +99,17 @@ pub fn validate_query(
                             .ok_or(QueryValidationError::InvalidField)?
                             .validate_selection_set(&s.selection_set)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation {
+                            operation: "subscription",
+                        })
+                    }
                 },
-                OperationDefinition::SelectionSet(q) => unimplemented!(),
+                OperationDefinition::SelectionSet(q) => {
+                    return Err(QueryValidationError::InvalidOperation {
+                        operation: "selection set",
+                    })
+                }
             },
             Definition::Fragment(def) => {
                 context.push_fragment_definition(def);
@@ -189,7 +205,7 @@ mod tests {
                 query: FruitQuery
             }
             "## =>
-            Err(QueryValidationError::InvalidField)
+            Err(QueryValidationError::InvalidOperation { operation: "mutation" })
         }
     }
 

@@ -1,7 +1,11 @@
+//! The mental model is the following:
+//!
+//! Very often a graphql object contains fields that are usually fetched together or trivial to get. We can just always set them in the Response and they will be pruned when the actual JSON response is sent. For other, more intricate fields (those that take an argument or require fetching more data), we want to have special handlers (but still go the simple route for the simple fields).
+//!
+//! This is achieved with the `on` and `merge` methods on `Response` and judicious usage of Rust's pattern matching and iterators.
+
 use futures::prelude::*;
-use identifiable::Identifiable;
 use json;
-use serde::*;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -179,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_json_object() {
+    fn nested_response() {
         let dogs_request = SomeField::Dogs {
             selection: vec![
                 Dog::Name,
