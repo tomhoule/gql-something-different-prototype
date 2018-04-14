@@ -185,6 +185,8 @@ impl Selectable for schema::ObjectType {
                         return Err(QueryValidationError::InvalidFieldArguments);
                     }
 
+                    validate_argument_types(&field.arguments, &schema_field.arguments)?;
+
                     let inner_name = ::shared::extract_inner_name(&schema_field.field_type);
                     let field_type = find_by_name(&schema.definitions, inner_name).ok();
                     if let Some(field_type) = field_type {
@@ -197,6 +199,49 @@ impl Selectable for schema::ObjectType {
 
         Ok(())
     }
+}
+
+fn validate_argument_types(
+    query_arguments: &[(String, graphql_parser::query::Value)],
+    schema_arguments: &[graphql_parser::schema::InputValue],
+) -> Result<(), QueryValidationError> {
+    use graphql_parser::query::Value;
+    use graphql_parser::schema::Type;
+
+    for (name, value) in query_arguments {
+        let schema_argument = schema_arguments
+            .iter()
+            .find(|arg| arg.name.as_str() == name.as_str())
+            .ok_or(QueryValidationError::InvalidFieldArguments)?;
+
+        // Validate listness of arguments
+        if let Value::List(_) = value {
+            if !matches!(schema_argument.value_type, Type::ListType(_)) {
+                return Err(QueryValidationError::InvalidFieldArguments);
+            }
+        }
+
+        let valid = match value {
+            Value::Boolean(_) => {
+                ::shared::extract_inner_name(&schema_argument.value_type) == "Boolean"
+            }
+            Value::Float(_) => ::shared::extract_inner_name(&schema_argument.value_type) == "Float",
+            Value::Int(_) => ::shared::extract_inner_name(&schema_argument.value_type) == "Int",
+            Value::String(_) => {
+                ::shared::extract_inner_name(&schema_argument.value_type) == "String"
+            }
+            // TODO: implement input object literals validation
+            Value::Object(obj) => true,
+            Value::Variable(_) => unimplemented!("Variable validation"),
+            Value::Enum(_) => unimplemented!("Enum validation"),
+            Value::Null | Value::List(_) => true,
+        };
+
+        if !valid {
+            return Err(QueryValidationError::InvalidFieldArguments);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -281,6 +326,68 @@ mod tests {
                     age
                     furDensity
                     barks
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age(dogYears: Boolean!): Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Err(QueryValidationError::InvalidFieldArguments)
+        }
+    }
+
+    #[test]
+    fn wrong_argument_type() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    age(dogYears: 10)
+                    furDensity
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age(dogYears: Boolean!): Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Err(QueryValidationError::InvalidFieldArguments)
+        }
+    }
+
+    #[test]
+    fn wrong_argument_listness() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    age(dogYears: [true])
+                    furDensity
                 }
             }
             "##,
