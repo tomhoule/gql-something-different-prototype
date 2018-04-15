@@ -189,7 +189,7 @@ mod tests {
         let response = Response::<Error>::new().on(Some(cats_request), resolve_query_root);
 
         assert_eq!(
-            ::futures::executor::block_on(response.resolve()).unwrap(),
+            response.resolve().wait().unwrap(),
             json!({ "cats": { "weight": 4 } })
         );
     }
@@ -203,7 +203,7 @@ mod tests {
             ::futures::future::ok(json!({ "weight": 5 } ))
         });
 
-        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+        let resolved = response.resolve().wait().unwrap();
 
         assert_eq!(resolved, json!({ "cats": { "weight": 5 } }));
     }
@@ -217,7 +217,7 @@ mod tests {
             res.set("whiskers", json!(9000)).resolve()
         });
 
-        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+        let resolved = response.resolve().wait().unwrap();
 
         assert_eq!(resolved, json!({ "cats": { "whiskers": 9000 } }));
     }
@@ -256,7 +256,7 @@ mod tests {
             SomeField::Cats { .. } => unimplemented!(),
         });
 
-        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+        let resolved = response.resolve().wait().unwrap();
 
         assert_eq!(
             resolved,
@@ -294,7 +294,7 @@ mod tests {
             SomeField::Cats { .. } => unimplemented!(),
         });
 
-        let resolved = ::futures::executor::block_on(response.resolve()).unwrap();
+        let resolved = response.resolve().wait().unwrap();
 
         assert_eq!(
             resolved,
