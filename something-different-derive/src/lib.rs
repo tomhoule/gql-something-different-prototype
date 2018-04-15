@@ -8,12 +8,15 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+#[macro_use]
+mod shared;
+
 mod coercion;
 mod context;
 mod enums;
 mod inputs;
+mod interfaces;
 mod objects;
-mod shared;
 mod unions;
 
 use coercion::*;
@@ -138,11 +141,11 @@ fn extract_definitions(document: &graphql_parser::schema::Document, context: &mu
                     context.insert_interface(interface_type.clone());
                 }
             },
-            Definition::DirectiveDefinition(_) => unimplemented!(),
+            Definition::DirectiveDefinition(_) => unimplemented!("directive definition"),
             Definition::SchemaDefinition(schema_definition) => {
                 context.set_schema(schema_definition.clone())
             }
-            Definition::TypeExtension(_) => unimplemented!(),
+            Definition::TypeExtension(_) => unimplemented!("type extension"),
         };
     }
 }
@@ -164,8 +167,8 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         buf.push(unions::gql_union_to_rs(union_type, &context));
     }
 
-    for _interface_type in context.interface_types.values() {
-        unimplemented!();
+    for interface_type in context.interface_types.values() {
+        buf.push(interfaces::gql_interface_to_rs(interface_type, &context));
     }
 
     if let Some(ref schema_definition) = context.get_schema() {
@@ -198,21 +201,6 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
 mod tests {
     use super::*;
     use graphql_parser::schema::*;
-    /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
-
-    macro_rules! assert_expands_to {
-        ($gql_string:expr => $expanded:tt) => {
-            let gql = $gql_string;
-            let parsed = parse_schema(gql).unwrap();
-            let mut buf = Vec::new();
-            let mut context = DeriveContext::new();
-            extract_definitions(&parsed, &mut context);
-            gql_document_to_rs(&mut buf, &context);
-            let got = quote!(#(#buf)*);
-            let expected = quote! $expanded ;
-            assert_eq!(expected, got);
-        };
-    }
 
     #[test]
     fn basic_object_derive() {

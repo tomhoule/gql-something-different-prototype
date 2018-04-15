@@ -100,6 +100,21 @@ pub fn type_is_optional(value_type: &graphql_parser::schema::Type) -> bool {
 }
 
 #[cfg(test)]
+macro_rules! assert_expands_to {
+    ($gql_string:expr => $expanded:tt) => {
+        let gql = $gql_string;
+        let parsed = ::graphql_parser::parse_schema(gql).unwrap();
+        let mut buf = Vec::new();
+        let mut context = DeriveContext::new();
+        ::extract_definitions(&parsed, &mut context);
+        ::gql_document_to_rs(&mut buf, &context);
+        let got = quote!(#(#buf)*);
+        let expected = quote! $expanded ;
+        assert_eq!(expected, got);
+    };
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

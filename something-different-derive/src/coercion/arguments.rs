@@ -128,7 +128,7 @@ fn field_variant_constructor(
         quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap(), #(#argument_idents_clone),* })
     } else if argument_idents.is_empty() {
         let field_type = Term::new(field_type_name, Span::call_site());
-        quote!(#field_name::#variant_name { selection: <#field_type as tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
+        quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
     } else {
         quote!(#field_name::#variant_name { #(#argument_idents_clone),* })
     }

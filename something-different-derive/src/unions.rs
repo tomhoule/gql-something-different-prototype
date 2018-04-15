@@ -23,21 +23,6 @@ mod tests {
     use super::*;
     use graphql_parser::schema::*;
 
-    /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
-    macro_rules! assert_expands_to {
-        ($gql_string:expr => $expanded:tt) => {
-            let gql = $gql_string;
-            let parsed = parse_schema(gql).unwrap();
-            let mut buf = Vec::new();
-            let mut context = DeriveContext::new();
-            ::extract_definitions(&parsed, &mut context);
-            ::gql_document_to_rs(&mut buf, &context);
-            let got = quote!(#(#buf)*);
-            let expected = quote! $expanded ;
-            assert_eq!(expected, got);
-        };
-    }
-
     #[test]
     fn unions() {
         assert_expands_to! {
