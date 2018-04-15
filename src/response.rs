@@ -253,7 +253,7 @@ mod tests {
                 }).merge(default_response)
                     .resolve()
             }
-            SomeField::Cats { .. } => unimplemented!(),
+            SomeField::Cats { .. } => unreachable!(),
         });
 
         let resolved = response.resolve().wait().unwrap();
@@ -291,7 +291,7 @@ mod tests {
                 Dog::FetchBall => Some(Ok(json!("doing a bamboozle"))),
                 _ => None,
             }).resolve(),
-            SomeField::Cats { .. } => unimplemented!(),
+            SomeField::Cats { .. } => unreachable!(),
         });
 
         let resolved = response.resolve().wait().unwrap();

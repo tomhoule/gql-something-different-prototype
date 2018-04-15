@@ -1,9 +1,8 @@
 use context::DeriveContext;
 use graphql_parser;
-use heck::*;
+use objects::get_field_names;
 use proc_macro2::{Literal, Span, Term};
 use quote;
-use shared;
 
 pub fn gql_interface_to_rs(
     interface_type: &graphql_parser::schema::InterfaceType,
@@ -17,10 +16,13 @@ pub fn gql_interface_to_rs(
         quote!()
     };
 
+    let field_names = get_field_names(&interface_type.fields, context);
+
     quote!(
         #doc_attr
         #[derive(Debug, PartialEq)]
         pub enum #name {
+            #(#field_names),*
         }
     )
 }
@@ -31,6 +33,25 @@ mod tests {
 
     #[test]
     fn interfaces_are_implemented() {
-        unimplemented!()
+        assert_expands_to! {
+        r##"
+        interface Character {
+          id: ID!
+          name: String!
+          withWittyComment(meh: Boolean): String
+          friends: [Character]
+          appearsIn: [Episode]!
+        }
+        "## => {
+            #[derive(Debug, PartialEq)]
+            pub enum Character {
+                Id,
+                Name,
+                WithWittyComment { meh: Option<bool> },
+                Friends { selection: Vec<Character>, },
+                AppearsIn { selection: Vec<Episode>, }
+            }
+        }
+        }
     }
 }
