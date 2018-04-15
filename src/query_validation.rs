@@ -34,12 +34,16 @@ impl ValidationContext {
 pub enum QueryValidationError {
     #[fail(display = "Invalid selection set")]
     InvalidSelectionSet(SelectionSet),
-    #[fail(display = "Unknown directive")]
-    UnknownDirective(Directive),
+    #[fail(display = "Unknown directive {}", directive)]
+    UnknownDirective { directive: Directive },
     #[fail(display = "Invalid field")]
     InvalidField,
     #[fail(display = "Invalid field arguments")]
     InvalidFieldArguments,
+    #[fail(display = "This operation is not defined for the schema: {}", operation)]
+    InvalidOperation { operation: &'static str },
+    #[fail(display = "Missing definition")]
+    MissingDefinition,
     #[fail(display = "Other error (if you see this it is a bug, a report would be very appreciated)")]
     Other,
 }
@@ -69,31 +73,42 @@ pub fn validate_query(
                 OperationDefinition::Query(ref q) => match &schema_definition.query {
                     Some(name) => {
                         context.extend_variable_definitions(q.variable_definitions.clone());
-                        find_by_name(&schema.definitions, name)
-                            .ok_or(QueryValidationError::InvalidField)?
-                            .validate_selection_set(&q.selection_set)?;
+                        find_by_name(&schema.definitions, name)?
+                            .validate_selection_set(&q.selection_set, &schema)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation { operation: "query" })
+                    }
                 },
                 OperationDefinition::Mutation(ref m) => match &schema_definition.mutation {
                     Some(name) => {
                         context.extend_variable_definitions(m.variable_definitions.clone());
-                        find_by_name(&schema.definitions, name)
-                            .ok_or(QueryValidationError::InvalidField)?
-                            .validate_selection_set(&m.selection_set)?;
+                        find_by_name(&schema.definitions, name)?
+                            .validate_selection_set(&m.selection_set, &schema)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation {
+                            operation: "mutation",
+                        })
+                    }
                 },
                 OperationDefinition::Subscription(s) => match &schema_definition.subscription {
                     Some(name) => {
                         context.extend_variable_definitions(s.variable_definitions.clone());
-                        find_by_name(&schema.definitions, name)
-                            .ok_or(QueryValidationError::InvalidField)?
-                            .validate_selection_set(&s.selection_set)?;
+                        find_by_name(&schema.definitions, name)?
+                            .validate_selection_set(&s.selection_set, &schema)?;
                     }
-                    None => return Err(QueryValidationError::InvalidField),
+                    None => {
+                        return Err(QueryValidationError::InvalidOperation {
+                            operation: "subscription",
+                        })
+                    }
                 },
-                OperationDefinition::SelectionSet(q) => unimplemented!(),
+                OperationDefinition::SelectionSet(_) => {
+                    return Err(QueryValidationError::InvalidOperation {
+                        operation: "selection set",
+                    })
+                }
             },
             Definition::Fragment(def) => {
                 context.push_fragment_definition(def);
@@ -104,47 +119,79 @@ pub fn validate_query(
     Ok(context)
 }
 
-fn find_by_name(definitions: &[schema::Definition], name: &str) -> Option<impl Selectable> {
+fn find_by_name(
+    definitions: &[schema::Definition],
+    name: &str,
+) -> Result<impl Selectable, QueryValidationError> {
     for definition in definitions.iter() {
         match definition {
             schema::Definition::TypeDefinition(schema::TypeDefinition::Object(def))
                 if def.name == name =>
             {
-                return Some(def.clone())
+                return Ok(def.clone())
             }
             _ => (),
         }
     }
 
-    None
+    Err(QueryValidationError::MissingDefinition)
 }
 
 trait Selectable {
-    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError>;
+    fn validate_selection_set(
+        &self,
+        set: &SelectionSet,
+        schema: &graphql_parser::schema::Document,
+    ) -> Result<(), QueryValidationError>;
 }
 
 impl Selectable for schema::TypeDefinition {
-    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError> {
+    fn validate_selection_set(
+        &self,
+        set: &SelectionSet,
+        schema: &graphql_parser::schema::Document,
+    ) -> Result<(), QueryValidationError> {
         match self {
-            schema::TypeDefinition::Object(obj) => obj.validate_selection_set(set),
+            schema::TypeDefinition::Object(obj) => obj.validate_selection_set(set, &schema),
             _ => unimplemented!(),
         }
     }
 }
 
 impl Selectable for schema::ObjectType {
-    fn validate_selection_set(&self, set: &SelectionSet) -> Result<(), QueryValidationError> {
-        println!(
-            "trying to validate selection set {:?}\n\n on \n{:?}\n\n",
-            set, self
-        );
+    fn validate_selection_set(
+        &self,
+        set: &SelectionSet,
+        schema: &graphql_parser::schema::Document,
+    ) -> Result<(), QueryValidationError> {
         for selected in set.items.iter() {
             match selected {
                 Selection::Field(field) => {
-                    self.fields
+                    let schema_field = self.fields
                         .iter()
                         .find(|f| f.name == field.name)
                         .ok_or_else(|| QueryValidationError::InvalidSelectionSet(set.clone()))?;
+
+                    let mut required_arguments = schema_field.arguments.iter().filter(|arg| {
+                        matches!(arg.value_type, graphql_parser::schema::Type::NonNullType(_))
+                    });
+
+                    if required_arguments.any(|arg| {
+                        !field.arguments.iter().any(|(name, value)| {
+                            name.as_str() == arg.name.as_str()
+                                && value != &graphql_parser::query::Value::Null
+                        })
+                    }) {
+                        return Err(QueryValidationError::InvalidFieldArguments);
+                    }
+
+                    validate_argument_types(&field.arguments, &schema_field.arguments)?;
+
+                    let inner_name = ::shared::extract_inner_name(&schema_field.field_type);
+                    let field_type = find_by_name(&schema.definitions, inner_name).ok();
+                    if let Some(field_type) = field_type {
+                        field_type.validate_selection_set(&field.selection_set, &schema)?;
+                    }
                 }
                 _ => return Err(QueryValidationError::InvalidSelectionSet(set.clone())),
             }
@@ -152,6 +199,49 @@ impl Selectable for schema::ObjectType {
 
         Ok(())
     }
+}
+
+fn validate_argument_types(
+    query_arguments: &[(String, graphql_parser::query::Value)],
+    schema_arguments: &[graphql_parser::schema::InputValue],
+) -> Result<(), QueryValidationError> {
+    use graphql_parser::query::Value;
+    use graphql_parser::schema::Type;
+
+    for (name, value) in query_arguments {
+        let schema_argument = schema_arguments
+            .iter()
+            .find(|arg| arg.name.as_str() == name.as_str())
+            .ok_or(QueryValidationError::InvalidFieldArguments)?;
+
+        // Validate listness of arguments
+        if let Value::List(_) = value {
+            if !matches!(schema_argument.value_type, Type::ListType(_)) {
+                return Err(QueryValidationError::InvalidFieldArguments);
+            }
+        }
+
+        let valid = match value {
+            Value::Boolean(_) => {
+                ::shared::extract_inner_name(&schema_argument.value_type) == "Boolean"
+            }
+            Value::Float(_) => ::shared::extract_inner_name(&schema_argument.value_type) == "Float",
+            Value::Int(_) => ::shared::extract_inner_name(&schema_argument.value_type) == "Int",
+            Value::String(_) => {
+                ::shared::extract_inner_name(&schema_argument.value_type) == "String"
+            }
+            // TODO: implement input object literals validation
+            Value::Object(_obj) => true,
+            Value::Variable(_) => unimplemented!("Variable validation"),
+            Value::Enum(_) => unimplemented!("Enum validation"),
+            Value::Null | Value::List(_) => true,
+        };
+
+        if !valid {
+            return Err(QueryValidationError::InvalidFieldArguments);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -189,7 +279,7 @@ mod tests {
                 query: FruitQuery
             }
             "## =>
-            Err(QueryValidationError::InvalidField)
+            Err(QueryValidationError::InvalidOperation { operation: "mutation" })
         }
     }
 
@@ -223,6 +313,101 @@ mod tests {
             }
             "## =>
             Ok(ValidationContext::new())
+        }
+    }
+
+    #[test]
+    fn missing_arguments() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    name
+                    age
+                    furDensity
+                    barks
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age(dogYears: Boolean!): Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Err(QueryValidationError::InvalidFieldArguments)
+        }
+    }
+
+    #[test]
+    fn wrong_argument_type() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    age(dogYears: 10)
+                    furDensity
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age(dogYears: Boolean!): Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Err(QueryValidationError::InvalidFieldArguments)
+        }
+    }
+
+    #[test]
+    fn wrong_argument_listness() {
+        assert_validates! {
+            r##"
+            query {
+                dogs {
+                    age(dogYears: [true])
+                    furDensity
+                }
+            }
+            "##,
+            r##"
+            type Dog {
+                name: String!
+                age(dogYears: Boolean!): Int
+                furDensity: Int
+                barks: Boolean
+            }
+
+            type Query {
+                dogs: [Dog!]!
+            }
+
+            schema {
+                query: Query
+            }
+            "## =>
+            Err(QueryValidationError::InvalidFieldArguments)
         }
     }
 }
