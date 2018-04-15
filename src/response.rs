@@ -40,6 +40,9 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
         }
     }
 
+    /// Handle one field asynchronously. You can pass your enum variants directly to this method and the `PathFragment` impls will take care of getting the paths right.
+    ///
+    /// TODO: example
     pub fn on<T: PathFragment, F: IntoFuture<Item = json::Value, Error = Error> + 'static>(
         mut self,
         field: Option<T>,
@@ -59,23 +62,23 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
     }
 
     /// Passing all fields to `on_each` should be avoided unless all of them are asynchronous, since this allocates (to store the resulting future). Values that are not futures should go through `merge`.
-    ///
-    // TODO: should the handler return a Future instead so it's harder to use this wrong?
     pub fn on_each<T: PathFragment, F: IntoFuture<Item = json::Value, Error = Error> + 'static>(
         mut self,
-        fields: impl Iterator<Item = T>,
-        handler: impl Fn(&T, Response<Error>) -> F,
+        fields: impl IntoIterator<Item = T>,
+        handler: impl Fn(&T, Response<Error>) -> Option<F>,
     ) -> Self {
         for field in fields {
             let path_suffix = field.as_path_fragment();
-            println!("path suffix: {:?}", path_suffix);
             let mut full_path = self.path.clone();
             full_path.push(path_suffix);
-            self.deferred_fields.push(Box::new(
-                handler(&field, Response::create(&full_path))
-                    .into_future()
-                    .map(move |res| json!({ path_suffix: res })),
-            ));
+            let fut = handler(&field, Response::create(&full_path));
+
+            if let Some(fut) = fut {
+                self.deferred_fields.push(Box::new(
+                    fut.into_future()
+                        .map(move |res| json!({ path_suffix: res })),
+                ));
+            }
         }
         self
     }
@@ -283,18 +286,11 @@ mod tests {
         };
 
         let response = Response::<Error>::new().on(Some(dogs_request), |req, res| match req {
-            SomeField::Dogs { selection, .. } => {
-                let deferred_fields = selection.iter().filter(|dog| match dog {
-                    Dog::Skills { .. } | Dog::FetchBall => true,
-                    _ => false,
-                });
-
-                res.on_each(deferred_fields, |req, _res| match req {
-                    Dog::Skills { .. } => Ok(json!({ "can_sit": true })),
-                    Dog::FetchBall => Ok(json!("doing a bamboozle")),
-                    _ => unreachable!(),
-                }).resolve()
-            }
+            SomeField::Dogs { selection, .. } => res.on_each(selection, |req, _res| match req {
+                Dog::Skills { .. } => Some(Ok(json!({ "can_sit": true }))),
+                Dog::FetchBall => Some(Ok(json!("doing a bamboozle"))),
+                _ => None,
+            }).resolve(),
             SomeField::Cats { .. } => unimplemented!(),
         });
 
