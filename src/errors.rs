@@ -3,25 +3,25 @@ use graphql_parser::query::ParseError;
 use std::convert::From;
 
 #[derive(Debug, Fail)]
-pub enum GqlError {
+pub enum GqlError<ResolverError> {
     #[fail(display = "Invalid request")]
     InvalidRequest,
     #[fail(display = "Invalid query")]
     InvalidQuery,
     #[fail(display = "Resolver error")]
-    ResolverError,
+    ResolverError(ResolverError),
     #[fail(display = "Invalid error")]
     InternalError,
 }
 
-impl From<CoercionError> for GqlError {
-    fn from(err: CoercionError) -> GqlError {
+impl<ResolverError> From<CoercionError> for GqlError<ResolverError> {
+    fn from(_err: CoercionError) -> Self {
         GqlError::InternalError
     }
 }
 
-impl From<ParseError> for GqlError {
-    fn from(err: ParseError) -> GqlError {
+impl<ResolverError> From<ParseError> for GqlError<ResolverError> {
+    fn from(_err: ParseError) -> Self {
         GqlError::InvalidQuery
     }
 }

@@ -38,6 +38,7 @@ where
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
+        let cloned = self.0.clone();
         Box::new(
             body_to_response(self.0.clone(), req.body())
                 .and_then(|body| {
@@ -45,26 +46,15 @@ where
                     res.set_body(json::to_string(&body).expect("the response is valid json"));
                     Ok(res)
                 })
-                .or_else(|err| {
+                .or_else(move |err| {
                     let mut res = hyper::Response::new();
-                    res.set_body("heh, error");
+                    println!("{:?}", err);
+                    let resolver: &Resolver = &cloned.resolver;
+                    let body_string = json::to_string(&resolver.handle_errors(err)).unwrap();
+                    res.set_body(body_string);
                     Ok(res)
                 }),
         )
-
-        // let req.body()
-        //     .collect()
-        //     .and_then(|req_body| String::from_utf8(request_string))
-        //     .and_then(|schema| graphql_parser::parse_schem(&schema))
-        //     .and_then(|schema| {
-        //         self.resolver
-        //             .handle(schema, Response::new())
-        //             .and_then(move |json| res.write(json))
-        //     })
-        //     .or_else(move |err| {
-        //         let debug_error = format!("{:?}", err);
-        //         res.write(json!({ "errors": debug_error }))
-        //     })
     }
 }
 
@@ -75,11 +65,11 @@ fn body_to_response<
 >(
     server: Arc<StandaloneServer<Schema, Error, Resolver>>,
     body: hyper::Body,
-) -> impl Future<Item = json::Value, Error = GqlError> {
+) -> impl Future<Item = json::Value, Error = GqlError<Error>> {
     body.map_err(|_| GqlError::InternalError)
         .fold(Vec::new(), |mut acc, item| {
             acc.extend(item);
-            Ok(acc) as Result<Vec<u8>, GqlError>
+            Ok(acc) as Result<Vec<u8>, GqlError<Error>>
         })
         .and_then(|req_body| String::from_utf8(req_body).map_err(|_| GqlError::InvalidRequest))
         .and_then(|request_string| {
@@ -93,7 +83,7 @@ fn body_to_response<
             server
                 .resolver
                 .resolve(query, Response::new())
-                .map_err(|err| GqlError::ResolverError)
+                .map_err(|err| GqlError::ResolverError(err))
         })
         .map(|_| json!({}))
 }
@@ -119,9 +109,11 @@ where
 
     pub fn start(self) -> Result<(), ()> {
         let new_service = ::std::sync::Arc::new(self);
-        hyper::server::Http::new().bind(&"8000".parse().unwrap(), move || {
-            Ok(ServerWrapper(new_service.clone()))
-        });
+        hyper::server::Http::new()
+            .bind(&"8000".parse().unwrap(), move || {
+                Ok(ServerWrapper(new_service.clone()))
+            })
+            .expect("server started");
         Ok(())
     }
 }
