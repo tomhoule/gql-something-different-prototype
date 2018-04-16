@@ -12,6 +12,13 @@ use tokio_gql::coercion::*;
 #[SomethingCompletelyDifferent(path = "tests/basic_schema.graphql")]
 struct BasicSchema;
 
+mod star_wars {
+    #[allow(dead_code)]
+    #[derive(SomethingCompletelyDifferent)]
+    #[SomethingCompletelyDifferent(path = "tests/star_wars_schema.graphql")]
+    struct ComplexSchema;
+}
+
 fn test_coercion(query: &str, expected_result: Result<Schema, CoercionError>) {
     let context = tokio_gql::query_validation::ValidationContext::new();
     let query = parse_query(query).unwrap();
