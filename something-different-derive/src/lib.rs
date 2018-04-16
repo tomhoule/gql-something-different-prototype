@@ -82,6 +82,10 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(union_type.impl_coerce(&context));
     }
 
+    for interface_type in context.interface_types.values() {
+        coerce_impls.push(interface_type.impl_coerce(&context));
+    }
+
     coerce_impls.push(
         context
             .get_schema()
@@ -175,17 +179,17 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
             let object_name = Term::new(query.as_str(), Span::call_site());
-            fields.push(quote!(query: Vec<#object_name>));
+            fields.push(quote!(pub query: Vec<#object_name>));
         }
 
         if let Some(ref mutation) = schema_definition.mutation {
             let object_name = Term::new(mutation.as_str(), Span::call_site());
-            fields.push(quote!(mutation: Vec<#object_name>));
+            fields.push(quote!(pub mutation: Vec<#object_name>));
         }
 
         if let Some(ref subscription) = schema_definition.subscription {
             let object_name = Term::new(subscription.as_str(), Span::call_site());
-            fields.push(quote!(subscription: Vec<#object_name>));
+            fields.push(quote!(pub subscription: Vec<#object_name>));
         }
 
         buf.push(quote!{
@@ -214,9 +218,9 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub struct Schema {
-                    query: Vec<MyQuery>,
-                    mutation: Vec<AMutation>,
-                    subscription: Vec<TheSubscription>,
+                    pub query: Vec<MyQuery>,
+                    pub mutation: Vec<AMutation>,
+                    pub subscription: Vec<TheSubscription>,
                 }
             }
         }
@@ -232,7 +236,7 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub struct Schema {
-                    query: Vec<SomeQuery>,
+                    pub query: Vec<SomeQuery>,
                 }
             }
         }

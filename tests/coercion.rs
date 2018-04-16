@@ -19,10 +19,13 @@ mod star_wars {
     struct ComplexSchema;
 }
 
-fn test_coercion(query: &str, expected_result: Result<Schema, CoercionError>) {
+fn test_coercion<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq>(
+    query: &str,
+    expected_result: Result<SchemaType, CoercionError>,
+) {
     let context = tokio_gql::query_validation::ValidationContext::new();
     let query = parse_query(query).unwrap();
-    let fields = Schema::coerce(&query, &context);
+    let fields = SchemaType::coerce(&query, &context);
 
     assert_eq!(fields, expected_result,)
 }
@@ -38,7 +41,7 @@ fn query_coercion_works() {
     let expected = Ok(Schema {
         query: vec![User::LastName, User::Greeting],
     });
-    test_coercion(query, expected);
+    test_coercion::<Schema>(query, expected);
 }
 
 #[test]
@@ -49,18 +52,16 @@ fn basic_argument_coercion() {
     }
     "##;
     let expected = Ok(Schema {
-        query: vec![
-            User::SayHello {
-                name: Some("Emilio".to_string()),
-            },
-        ],
+        query: vec![User::SayHello {
+            name: Some("Emilio".to_string()),
+        }],
     });
-    test_coercion(query, expected);
+    test_coercion::<Schema>(query, expected);
 }
 
 #[test]
 fn optional_argument_coercion_none() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
     query {
         sayHello(name: null)
@@ -74,18 +75,16 @@ fn optional_argument_coercion_none() {
 
 #[test]
 fn optional_argument_coercion_some() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
     query {
         sayHello(name: "Pikachu")
     }
     "##,
         Ok(Schema {
-            query: vec![
-                User::SayHello {
-                    name: Some("Pikachu".to_string()),
-                },
-            ],
+            query: vec![User::SayHello {
+                name: Some("Pikachu".to_string()),
+            }],
         }),
     );
 }
@@ -93,7 +92,7 @@ fn optional_argument_coercion_some() {
 /// We do not consider this as an error because that should be caught at the validation step.
 #[test]
 fn wrong_argument_name_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
     query {
         sayHello(name: 33)
@@ -138,62 +137,56 @@ fn int_argument_coercion() {
 
 #[test]
 fn multiple_arguments_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r###"
         query {
             compare(a: "fourty odd", b: 44)
         }
         "###,
         Ok(Schema {
-            query: vec![
-                User::Compare {
-                    a: Some("fourty odd".to_string()),
-                    b: Some(44),
-                },
-            ],
+            query: vec![User::Compare {
+                a: Some("fourty odd".to_string()),
+                b: Some(44),
+            }],
         }),
     );
 }
 
 #[test]
 fn required_list_of_required_elements_argument_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r###"
         query {
             winningNumbers(numbers: [5, 25, 100])
         }
         "###,
         Ok(Schema {
-            query: vec![
-                User::WinningNumbers {
-                    numbers: vec![5, 25, 100],
-                },
-            ],
+            query: vec![User::WinningNumbers {
+                numbers: vec![5, 25, 100],
+            }],
         }),
     )
 }
 
 #[test]
 fn optional_list_of_optional_elements_argument_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r###"
         query {
             allPrimes(nums: [3, 8, 0, -22])
         }
         "###,
         Ok(Schema {
-            query: vec![
-                User::AllPrimes {
-                    nums: Some(vec![Some(3), Some(8), Some(0), Some(-22)]),
-                },
-            ],
+            query: vec![User::AllPrimes {
+                nums: Some(vec![Some(3), Some(8), Some(0), Some(-22)]),
+            }],
         }),
     );
 }
 
 #[test]
 fn null_argument_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             sayHello(name: null)
@@ -207,7 +200,7 @@ fn null_argument_coercion() {
 
 #[test]
 fn required_object_argument_coercion() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             isAGoodDog(dog: {
@@ -219,23 +212,21 @@ fn required_object_argument_coercion() {
         }
         "##,
         Ok(Schema {
-            query: vec![
-                User::IsAGoodDog {
-                    dog: Dog {
-                        name: "Hachi".to_string(),
-                        weight: 12,
-                        vaccinated: Some(true),
-                        has_chip: Some(true),
-                    },
+            query: vec![User::IsAGoodDog {
+                dog: Dog {
+                    name: "Hachi".to_string(),
+                    weight: 12,
+                    vaccinated: Some(true),
+                    has_chip: Some(true),
                 },
-            ],
+            }],
         }),
     )
 }
 
 #[test]
 fn optional_object_argument_coercion_with_null() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             petDog(dog: null)
@@ -250,7 +241,7 @@ fn optional_object_argument_coercion_with_null() {
 #[test]
 fn arguments_with_composed_names() {
     // TODO: test with composed names (with underscores, different case)
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             petDog(dog: {
@@ -261,23 +252,21 @@ fn arguments_with_composed_names() {
         }
         "##,
         Ok(Schema {
-            query: vec![
-                User::PetDog {
-                    dog: Some(Dog {
-                        name: "Hachi".to_string(),
-                        weight: 12,
-                        has_chip: Some(false),
-                        vaccinated: None,
-                    }),
-                },
-            ],
+            query: vec![User::PetDog {
+                dog: Some(Dog {
+                    name: "Hachi".to_string(),
+                    weight: 12,
+                    has_chip: Some(false),
+                    vaccinated: None,
+                }),
+            }],
         }),
     )
 }
 
 #[test]
 fn optional_object_argument_coercion_with_value() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             petDog(dog: {
@@ -288,23 +277,21 @@ fn optional_object_argument_coercion_with_value() {
         }
         "##,
         Ok(Schema {
-            query: vec![
-                User::PetDog {
-                    dog: Some(Dog {
-                        name: "Hachi".to_string(),
-                        weight: 12,
-                        vaccinated: Some(true),
-                        has_chip: None,
-                    }),
-                },
-            ],
+            query: vec![User::PetDog {
+                dog: Some(Dog {
+                    name: "Hachi".to_string(),
+                    weight: 12,
+                    vaccinated: Some(true),
+                    has_chip: None,
+                }),
+            }],
         }),
     )
 }
 
 #[test]
 fn field_returning_object() {
-    test_coercion(
+    test_coercion::<Schema>(
         r##"
         query {
             getInbox(index: 3) {
@@ -313,12 +300,44 @@ fn field_returning_object() {
         }
         "##,
         Ok(Schema {
-            query: vec![
-                User::GetInbox {
-                    selection: vec![Email::AttachmentsContainDogPhotos],
-                    index: Some(3),
-                },
-            ],
+            query: vec![User::GetInbox {
+                selection: vec![Email::AttachmentsContainDogPhotos],
+                index: Some(3),
+            }],
         }),
     )
+}
+
+#[test]
+fn union_coercion() {
+    use self::star_wars;
+    test_coercion::<star_wars::Schema>(
+        r##"
+        query {
+            search(text: "Jar Jar Binks") {
+                ...on Human {
+                    name,
+                    homePlanet,
+                }
+                ...on Droid {
+                    name,
+                }
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Search {
+                text: Some("Jar Jar Binks".to_string()),
+                selection: vec![
+                    star_wars::SearchResult::OnHuman(vec![
+                        star_wars::Human::Name,
+                        star_wars::Human::HomePlanet,
+                    ]),
+                    star_wars::SearchResult::OnDroid(vec![star_wars::Droid::Name]),
+                ],
+            }],
+        }),
+    );
 }

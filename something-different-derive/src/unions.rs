@@ -6,7 +6,7 @@ use quote;
 pub fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quote::Tokens {
     let name = Term::new(union_type.name.as_str(), Span::call_site());
     let united_types = union_type.types.iter().map(|ty| {
-        let ident = Term::new(&format!("on{}", ty.as_str()), Span::call_site());
+        let ident = Term::new(&format!("On{}", ty.as_str()), Span::call_site());
         let selection_type = Term::new(ty.as_str(), Span::call_site());
         quote!(#ident(Vec<#selection_type>))
     });
@@ -31,9 +31,9 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub enum SearchResult {
-                    onHuman(Vec<Human>),
-                    onDroid(Vec<Droid>),
-                    onStarship(Vec<Starship>)
+                    OnHuman(Vec<Human>),
+                    OnDroid(Vec<Droid>),
+                    OnStarship(Vec<Starship>)
                 }
             }
         }

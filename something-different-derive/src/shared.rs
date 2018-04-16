@@ -54,6 +54,7 @@ pub fn correspondant_type(gql_type: &str) -> &str {
         "String" => "String",
         "Double" => "f64",
         "Boolean" => "bool",
+        "ID" => "String",
         other => other,
     }
 }
@@ -79,7 +80,9 @@ pub fn value_variant_for_type(
     } else {
         let name = extract_inner_name(&value_type);
 
-        if context.is_scalar(name) {
+        if name == "ID" {
+            "String"
+        } else if context.is_scalar(name) {
             name
         } else if context.is_enum(name) {
             "Enum"

@@ -47,7 +47,7 @@ pub fn get_field_names<'a>(
                 .collect();
             let field_type_name = shared::extract_inner_name(&f.field_type);
             let sub_field_set: Option<Term> =
-                if (context.is_scalar(field_type_name) || context.is_enum(field_type_name)) {
+                if context.is_scalar(field_type_name) || context.is_enum(field_type_name) {
                     None
                 } else {
                     Some(Term::new(

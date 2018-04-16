@@ -33,6 +33,8 @@ impl ImplCoerce for SchemaDefinition {
             .map(|name| Term::new(&format!("{}", name).to_camel_case(), Span::call_site()))
             .collect();
         let field_names_2 = field_names.clone();
+        let field_names_3 = field_names.clone();
+        let field_names_4 = field_names.clone();
         let field_values_clone = field_values.clone();
 
         quote! {
@@ -42,7 +44,7 @@ impl ImplCoerce for SchemaDefinition {
                     context: &::tokio_gql::query_validation::ValidationContext
                 ) -> Result<Self, ::tokio_gql::coercion::CoercionError> {
                     #(
-                        let #field_names: Vec<#field_values> = document.definitions
+                        let #field_names: Result<Vec<#field_values>, _> = document.definitions
                             .iter()
                             .filter_map(|op| {
                                 if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
@@ -57,11 +59,12 @@ impl ImplCoerce for SchemaDefinition {
                                 }
                             })
                             .next()
-                            .ok_or(::tokio_gql::coercion::CoercionError)??;
+                            .unwrap_or(Ok(Vec::new()));
+                        let #field_names_2 = #field_names_3?;
                     )*
 
                     Ok(Schema {
-                        #(#field_names_2),*
+                        #(#field_names_4),*
                     })
                 }
             }
