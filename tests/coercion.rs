@@ -341,3 +341,25 @@ fn union_coercion() {
         }),
     );
 }
+
+#[test]
+fn enum_argument_coercion() {
+    use self::star_wars;
+    test_coercion::<star_wars::Schema>(
+        r##"
+        query {
+            hero(episode: JEDI) {
+                name
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Hero {
+                episode: Some(star_wars::Episode::Jedi),
+                selection: vec![star_wars::Character::Name],
+            }],
+        }),
+    );
+}
