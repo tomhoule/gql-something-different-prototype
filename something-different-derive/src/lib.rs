@@ -71,6 +71,14 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(input_object_type.impl_coerce(&context));
     }
 
+    for enm in context.enum_types.values() {
+        coerce_impls.push(enm.impl_coerce(&context));
+    }
+
+    for union_type in context.union_types.values() {
+        coerce_impls.push(union_type.impl_coerce(&context));
+    }
+
     coerce_impls.push(
         context
             .get_schema()
