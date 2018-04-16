@@ -26,14 +26,15 @@ pub fn gql_type_to_rs(
                 })
                 .collect();
             let field_type_name = shared::extract_inner_name(&f.field_type);
-            let sub_field_set: Option<Term> = if context.is_scalar(field_type_name) {
-                None
-            } else {
-                Some(Term::new(
-                    field_type_name.to_camel_case().as_str(),
-                    Span::call_site(),
-                ))
-            };
+            let sub_field_set: Option<Term> =
+                if (context.is_scalar(field_type_name) || context.is_enum(field_type_name)) {
+                    None
+                } else {
+                    Some(Term::new(
+                        field_type_name.to_camel_case().as_str(),
+                        Span::call_site(),
+                    ))
+                };
             let sub_field_set: Option<quote::Tokens> =
                 sub_field_set.map(|set| quote!{ selection: Vec<#set>, });
             if sub_field_set.is_some() || !args.is_empty() {

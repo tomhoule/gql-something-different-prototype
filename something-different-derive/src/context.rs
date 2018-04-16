@@ -68,6 +68,10 @@ impl DeriveContext {
         self.scalar_types.contains(type_name)
     }
 
+    pub fn is_enum(&self, type_name: &str) -> bool {
+        self.enum_types.keys().any(|k| k == type_name)
+    }
+
     pub fn insert_union(&mut self, union_type: UnionType) {
         self.union_types.insert(union_type.name.clone(), union_type);
     }

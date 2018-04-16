@@ -117,9 +117,13 @@ fn field_variant_constructor(
         .map(|arg| Term::new(&arg.name.to_mixed_case(), Span::call_site()))
         .collect();
     let argument_idents_clone = argument_idents.clone();
-    if argument_idents.is_empty() && context.is_scalar(field_type_name) {
+    if argument_idents.is_empty()
+        && (context.is_scalar(field_type_name) || context.is_enum(field_type_name))
+    {
         quote!(#field_name::#variant_name)
-    } else if !argument_idents.is_empty() && !context.is_scalar(field_type_name) {
+    } else if !argument_idents.is_empty()
+        && !(context.is_scalar(field_type_name) || context.is_enum(field_type_name))
+    {
         let field_type = Term::new(field_type_name, Span::call_site());
         quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap(), #(#argument_idents_clone),* })
     } else if argument_idents.is_empty() {

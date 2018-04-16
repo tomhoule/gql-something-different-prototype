@@ -81,6 +81,8 @@ pub fn value_variant_for_type(
 
         if context.is_scalar(name) {
             name
+        } else if context.is_enum(name) {
+            "Enum"
         } else {
             "Object"
         }
@@ -89,9 +91,7 @@ pub fn value_variant_for_type(
     quote!(::tokio_gql::graphql_parser::schema::Value::#variant)
 }
 
-pub fn type_is_optional(
-    value_type: &graphql_parser::schema::Type,
-) -> bool {
+pub fn type_is_optional(value_type: &graphql_parser::schema::Type) -> bool {
     if let graphql_parser::schema::Type::NonNullType(_) = value_type {
         false
     } else {
