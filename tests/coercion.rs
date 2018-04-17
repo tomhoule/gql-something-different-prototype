@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate tokio_gql;
-extern crate serde_json;
+extern crate serde_json as json;
 
 extern crate graphql_parser;
 use graphql_parser::query::*;
@@ -23,7 +23,15 @@ fn test_coercion<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq
     query: &str,
     expected_result: Result<SchemaType, CoercionError>,
 ) {
-    let context = tokio_gql::query_validation::ValidationContext::new();
+    let context = tokio_gql::query_validation::ValidationContext::new(json::Map::new());
+    test_coercion_with_context(context, query, expected_result);
+}
+
+fn test_coercion_with_context<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq>(
+    context: tokio_gql::query_validation::ValidationContext,
+    query: &str,
+    expected_result: Result<SchemaType, CoercionError>,
+) {
     let query = parse_query(query).unwrap();
     let fields = SchemaType::coerce(&query, &context);
 
@@ -106,32 +114,27 @@ fn wrong_argument_name_coercion() {
 
 #[test]
 fn wrong_argument_type_coercion() {
-    let query = r##"
-    query {
-        sayHello(age: "meow")
-    }
-    "##;
-    let context = tokio_gql::query_validation::ValidationContext::new();
-    let query = parse_query(query).unwrap();
-    let coerced = Schema::coerce(&query, &context);
-    assert_eq!(coerced, Err(CoercionError));
+    test_coercion::<Schema>(
+        r##"
+        query {
+            sayHello(age: "meow")
+        }
+        "##,
+        Err(CoercionError),
+    )
 }
 
 #[test]
 fn int_argument_coercion() {
-    let query = r##"
-    query {
-        double(num: 4)
-    }
-    "##;
-    let context = tokio_gql::query_validation::ValidationContext::new();
-    let query = parse_query(query).unwrap();
-    let coerced = Schema::coerce(&query, &context);
-    assert_eq!(
-        coerced,
+    test_coercion::<Schema>(
+        r##"
+        query {
+            double(num: 4)
+        }
+        "##,
         Ok(Schema {
             query: vec![User::Double { num: 4 }],
-        })
+        }),
     )
 }
 
@@ -146,6 +149,25 @@ fn multiple_arguments_coercion() {
         Ok(Schema {
             query: vec![User::Compare {
                 a: Some("fourty odd".to_string()),
+                b: Some(44),
+            }],
+        }),
+    );
+}
+
+#[test]
+fn coercion_with_optional_variable_on_optional_field() {
+    let context = tokio_gql::query_validation::ValidationContext::new(json::Map::new());
+    test_coercion_with_context::<Schema>(
+        context,
+        r###"
+        query User($number_string: String) {
+            compare(a: $number_string, b: 44)
+        }
+        "###,
+        Ok(Schema {
+            query: vec![User::Compare {
+                a: None,
                 b: Some(44),
             }],
         }),

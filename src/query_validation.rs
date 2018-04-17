@@ -1,20 +1,24 @@
 use graphql_parser;
 use graphql_parser::query::*;
 use graphql_parser::schema;
+use json;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 pub struct ValidationContext {
     fragment_definitions: Vec<FragmentDefinition>,
     variable_definitions: Vec<VariableDefinition>,
+    variables: json::Map<String, json::Value>,
 }
 
 impl ValidationContext {
-    pub fn new() -> ValidationContext {
+    pub fn new(variables: json::Map<String, json::Value>) -> ValidationContext {
         let fragment_definitions = Vec::new();
         let variable_definitions = Vec::new();
         ValidationContext {
             fragment_definitions,
             variable_definitions,
+            variables,
         }
     }
 
@@ -44,15 +48,22 @@ pub enum QueryValidationError {
     InvalidOperation { operation: &'static str },
     #[fail(display = "Missing definition")]
     MissingDefinition,
-    #[fail(display = "Other error (if you see this it is a bug, a report would be very appreciated)")]
+    #[fail(display = "The following variable was not provided: {}", name)]
+    MissingVariable { name: String },
+    #[fail(
+        display = "Other error (if you see this it is a bug, a report would be very appreciated)"
+    )]
     Other,
+    #[fail(display = "Variable mismatch")]
+    VariableMismatch,
 }
 
 pub fn validate_query(
     query: &graphql_parser::query::Document,
+    variables: json::Map<String, json::Value>,
     schema: &graphql_parser::schema::Document,
 ) -> Result<ValidationContext, QueryValidationError> {
-    let mut context = ValidationContext::new();
+    let mut context = ValidationContext::new(variables);
 
     let schema_definition = schema
         .definitions
@@ -72,7 +83,7 @@ pub fn validate_query(
             Definition::Operation(op) => match op {
                 OperationDefinition::Query(ref q) => match &schema_definition.query {
                     Some(name) => {
-                        context.extend_variable_definitions(q.variable_definitions.clone());
+                        validate_variables(&context.variables, &q.variable_definitions, &schema)?;
                         find_by_name(&schema.definitions, name)?
                             .validate_selection_set(&q.selection_set, &schema)?;
                     }
@@ -82,7 +93,7 @@ pub fn validate_query(
                 },
                 OperationDefinition::Mutation(ref m) => match &schema_definition.mutation {
                     Some(name) => {
-                        context.extend_variable_definitions(m.variable_definitions.clone());
+                        validate_variables(&context.variables, &m.variable_definitions, &schema)?;
                         find_by_name(&schema.definitions, name)?
                             .validate_selection_set(&m.selection_set, &schema)?;
                     }
@@ -94,7 +105,7 @@ pub fn validate_query(
                 },
                 OperationDefinition::Subscription(s) => match &schema_definition.subscription {
                     Some(name) => {
-                        context.extend_variable_definitions(s.variable_definitions.clone());
+                        validate_variables(&context.variables, &s.variable_definitions, &schema)?;
                         find_by_name(&schema.definitions, name)?
                             .validate_selection_set(&s.selection_set, &schema)?;
                     }
@@ -244,6 +255,66 @@ fn validate_argument_types(
     Ok(())
 }
 
+fn validate_variable(
+    variable: &json::Value,
+    expected_type: &graphql_parser::schema::Type,
+    schema: &graphql_parser::schema::Document,
+) -> Result<graphql_parser::query::Value, QueryValidationError> {
+    use graphql_parser::schema::Type;
+
+    match expected_type {
+        Type::NamedType(name) => unimplemented!(),
+        Type::NonNullType(inner) => validate_variable(variable, inner, schema),
+        Type::ListType(elem_type) => match variable {
+            json::Value::Array(inner) => {
+                let values: Result<Vec<graphql_parser::query::Value>, _> = inner
+                    .iter()
+                    .map(|var| validate_variable(var, elem_type, schema))
+                    .collect();
+                match values {
+                    Ok(v) => Ok(graphql_parser::query::Value::List(v)),
+                    Err(err) => Err(err),
+                }
+            }
+            _ => Err(QueryValidationError::VariableMismatch)?,
+        },
+    }
+}
+
+fn validate_variables(
+    variables: &json::Map<String, json::Value>,
+    definitions: &[VariableDefinition],
+    schema: &graphql_parser::schema::Document,
+) -> Result<HashMap<String, graphql_parser::query::Value>, QueryValidationError> {
+    use graphql_parser::schema::Type;
+
+    let mut result: HashMap<String, graphql_parser::query::Value> = HashMap::new();
+
+    for definition in definitions.iter() {
+        match (
+            &definition.var_type,
+            variables.get(&definition.name),
+            &definition.default_value,
+        ) {
+            (_, Some(val), _) => {
+                result.insert(
+                    definition.name.to_string(),
+                    validate_variable(val, &definition.var_type, schema)?,
+                );
+            }
+            (_, None, Some(val)) => {
+                result.insert(definition.name.to_string(), val.clone());
+            }
+            (Type::NonNullType(_), None, None) => Err(QueryValidationError::MissingVariable {
+                name: definition.name.to_string(),
+            })?,
+            (_, None, None) => (),
+        }
+    }
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,7 +328,10 @@ mod tests {
             let parsed_query = graphql_parser::parse_query(query).unwrap();
             let parsed_schema = graphql_parser::parse_schema(schema).unwrap();
 
-            assert_eq!(validate_query(&parsed_query, &parsed_schema), expected);
+            assert_eq!(
+                validate_query(&parsed_query, json::Map::new(), &parsed_schema),
+                expected
+            );
         };
     }
 
@@ -312,7 +386,7 @@ mod tests {
                 query: Query
             }
             "## =>
-            Ok(ValidationContext::new())
+            Ok(ValidationContext::new(json::Map::new()))
         }
     }
 

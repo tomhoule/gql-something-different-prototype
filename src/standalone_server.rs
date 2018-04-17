@@ -2,7 +2,8 @@ use coercion::CoerceQueryDocument;
 use errors::GqlError;
 use futures::prelude::*;
 use graphql_parser;
-use hyper::{self, server::{NewService, Service}};
+use hyper::{self,
+            server::{NewService, Service}};
 use json;
 use query_validation::ValidationContext;
 use response::Response;
@@ -74,7 +75,9 @@ fn body_to_response<
         .and_then(|req_body| String::from_utf8(req_body).map_err(|_| GqlError::InvalidRequest))
         .and_then(|request_string| {
             let parsed_query = graphql_parser::parse_query(&request_string)?;
-            let validation_context = ValidationContext::new();
+            let parsed_variables = json!({});
+            let parsed_variables = json::Map::new();
+            let validation_context = ValidationContext::new(parsed_variables);
             let query =
                 <Schema as CoerceQueryDocument>::coerce(&parsed_query, &validation_context)?;
             Ok(query)
