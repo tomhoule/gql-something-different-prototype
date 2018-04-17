@@ -8,7 +8,6 @@ use quote;
 impl ImplCoerce for EnumType {
     fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
         let name_term = Term::new(&self.name, Span::call_site());
-        let name = &self.name;
         let matchers = self.values.iter().map(|value| {
             let value_term = Term::new(&value.name.to_camel_case(), Span::call_site());
             let value_lit = &value.name;

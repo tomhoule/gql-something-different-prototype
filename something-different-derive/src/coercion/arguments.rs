@@ -42,8 +42,6 @@ pub struct ArgumentsContext {
 impl ImplCoerce for ArgumentsContext {
     fn impl_coerce(&self, context: &DeriveContext) -> quote::Tokens {
         let matchers = self.fields.iter().map(|field| {
-            // we have to split this in two: required and optional arguments
-
             let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
             let field_type_name = shared::extract_inner_name(&field.field_type);
@@ -78,18 +76,36 @@ impl ImplCoerce for ArgumentsContext {
                             }).ok_or(::tokio_gql::coercion::CoercionError)?;
                     }
                 } else {
-                    quote! {
-                        let #term = field
-                            .arguments
-                            .iter()
-                            .find(|(name, _)| name == #literal)
-                            .map(|(_, value)| {
-                                if let #argument_type(_) = value {
-                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("Should be propagated as a CoercionError")
-                                } else {
-                                    None
-                                }
-                            }).ok_or(::tokio_gql::coercion::CoercionError)?;
+                    if let Some(ref default) = arg.default_value {
+                        let default_literal = shared::query_value_to_tokens(default);
+                        quote! {
+                            let #term = field
+                                .arguments
+                                .iter()
+                                .find(|(name, _)| name == #literal)
+                                .map(|(_, value)| {
+                                    if let #argument_type(_) = value {
+                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                    } else {
+                                        None
+                                    }
+                                }).or(<#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(&#default_literal).ok())
+                                .ok_or(::tokio_gql::coercion::CoercionError)?;
+                        }
+                    } else {
+                        quote! {
+                            let #term = field
+                                .arguments
+                                .iter()
+                                .find(|(name, _)| name == #literal)
+                                .map(|(_, value)| {
+                                    if let #argument_type(_) = value {
+                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                    } else {
+                                        None
+                                    }
+                                }).ok_or(::tokio_gql::coercion::CoercionError)?;
+                        }
                     }
                 }
             });

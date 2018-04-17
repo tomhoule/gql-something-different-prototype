@@ -363,3 +363,27 @@ fn enum_argument_coercion() {
         }),
     );
 }
+
+#[test]
+fn default_values() {
+    use self::star_wars;
+    test_coercion::<star_wars::Schema>(
+        r##"
+        query {
+            starship(id: "42") {
+                length
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Starship {
+                id: "42".to_string(),
+                selection: vec![star_wars::Starship::Length {
+                    unit: Some(star_wars::LengthUnit::Meter),
+                }],
+            }],
+        }),
+    )
+}

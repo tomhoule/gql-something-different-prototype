@@ -5,7 +5,7 @@ use proc_macro2::{Span, Term};
 use quote;
 
 impl ImplCoerce for UnionType {
-    fn impl_coerce(&self, context: &DeriveContext) -> quote::Tokens {
+    fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
         let name_term: Term = Term::new(&self.name, Span::call_site());
 
         let field_matchers = self.types.iter().map(|ty| {
