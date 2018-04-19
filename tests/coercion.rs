@@ -561,3 +561,45 @@ fn other_primitive_variable_types() {
         }),
     );
 }
+
+#[test]
+fn interface_with_field_and_spread_selection() {
+    test_coercion::<star_wars::Schema>(
+        r##"
+        query {
+            character(id: "yoda") {
+                id
+                name
+                appearsIn
+                ...on Human {
+                    height
+                    homePlanet
+                }
+                ...on Droid {
+                    primaryFunction
+
+                }
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Character {
+                id: "yoda".to_string(),
+                selection: vec![
+                    star_wars::Character::Id,
+                    star_wars::Character::Name,
+                    star_wars::Character::AppearsIn,
+                    star_wars::Character::OnHuman(vec![
+                        star_wars::Human::Height {
+                            unit: Some(star_wars::LengthUnit::Meter),
+                        },
+                        star_wars::Human::HomePlanet,
+                    ]),
+                    star_wars::Character::OnDroid(vec![star_wars::Droid::PrimaryFunction]),
+                ],
+            }],
+        }),
+    );
+}

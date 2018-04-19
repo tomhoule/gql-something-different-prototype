@@ -30,7 +30,7 @@ impl ImplCoerce for InterfaceType {
             })
             .collect();
         let spread_matchers =
-            spread_matchers_for_types(name_term.clone(), implementor_names.iter());
+            spread_matchers_for_types(name_term.clone(), implementor_names.into_iter());
 
         quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name_term {
@@ -38,20 +38,20 @@ impl ImplCoerce for InterfaceType {
                     query: &::tokio_gql::graphql_parser::query::SelectionSet,
                     context: &::tokio_gql::query_validation::ValidationContext,
                 ) -> Result<Vec<#name_term>, ::tokio_gql::coercion::CoercionError> {
+                    let mut results = Vec::new();
                     for selection in query.items.iter() {
                         match selection {
                             ::tokio_gql::graphql_parser::query::Selection::Field(field) => {
-                                let mut result = Vec::new();
+                                let mut result = &mut results;
                                 #field_matchers
-                                return Ok(result)
                             }
                             ::tokio_gql::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!("fragment spread on interface"),
                             ::tokio_gql::graphql_parser::query::Selection::InlineFragment(fragment) => {
-
+                                #(#spread_matchers)*
                             }
                         }
                     }
-                    Ok(Vec::new())
+                    Ok(results)
                 }
             }
         }
