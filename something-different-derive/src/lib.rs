@@ -204,7 +204,6 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphql_parser::schema::*;
 
     #[test]
     fn schema_definition() {

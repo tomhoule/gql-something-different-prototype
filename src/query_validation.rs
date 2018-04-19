@@ -8,7 +8,7 @@ use std::collections::HashMap;
 pub struct ValidationContext {
     fragment_definitions: Vec<FragmentDefinition>,
     variable_definitions: Vec<VariableDefinition>,
-    variables: json::Map<String, json::Value>,
+    pub variables: json::Map<String, json::Value>,
 }
 
 impl ValidationContext {
@@ -83,9 +83,16 @@ pub fn validate_query(
             Definition::Operation(op) => match op {
                 OperationDefinition::Query(ref q) => match &schema_definition.query {
                     Some(name) => {
-                        validate_variables(&mut context.variables, &q.variable_definitions, &schema)?;
-                        find_by_name(&schema.definitions, name)?
-                            .validate_selection_set(&q.selection_set, &schema, &context)?;
+                        validate_variables(
+                            &mut context.variables,
+                            &q.variable_definitions,
+                            &schema,
+                        )?;
+                        find_by_name(&schema.definitions, name)?.validate_selection_set(
+                            &q.selection_set,
+                            &schema,
+                            &context,
+                        )?;
                     }
                     None => {
                         return Err(QueryValidationError::InvalidOperation { operation: "query" })
@@ -93,9 +100,16 @@ pub fn validate_query(
                 },
                 OperationDefinition::Mutation(ref m) => match &schema_definition.mutation {
                     Some(name) => {
-                        validate_variables(&mut context.variables, &m.variable_definitions, &schema)?;
-                        find_by_name(&schema.definitions, name)?
-                            .validate_selection_set(&m.selection_set, &schema, &context)?;
+                        validate_variables(
+                            &mut context.variables,
+                            &m.variable_definitions,
+                            &schema,
+                        )?;
+                        find_by_name(&schema.definitions, name)?.validate_selection_set(
+                            &m.selection_set,
+                            &schema,
+                            &context,
+                        )?;
                     }
                     None => {
                         return Err(QueryValidationError::InvalidOperation {
@@ -105,9 +119,16 @@ pub fn validate_query(
                 },
                 OperationDefinition::Subscription(s) => match &schema_definition.subscription {
                     Some(name) => {
-                        validate_variables(&mut context.variables, &s.variable_definitions, &schema)?;
-                        find_by_name(&schema.definitions, name)?
-                            .validate_selection_set(&s.selection_set, &schema, &context)?;
+                        validate_variables(
+                            &mut context.variables,
+                            &s.variable_definitions,
+                            &schema,
+                        )?;
+                        find_by_name(&schema.definitions, name)?.validate_selection_set(
+                            &s.selection_set,
+                            &schema,
+                            &context,
+                        )?;
                     }
                     None => {
                         return Err(QueryValidationError::InvalidOperation {
@@ -165,7 +186,9 @@ impl Selectable for schema::TypeDefinition {
         context: &ValidationContext,
     ) -> Result<(), QueryValidationError> {
         match self {
-            schema::TypeDefinition::Object(obj) => obj.validate_selection_set(set, &schema, &context),
+            schema::TypeDefinition::Object(obj) => {
+                obj.validate_selection_set(set, &schema, &context)
+            }
             _ => unimplemented!(),
         }
     }
@@ -250,7 +273,7 @@ fn validate_argument_types(
             Value::Variable(variable_name) => {
                 context.variables.contains_key(variable_name)
                 // TODO: Validate that the variable is the right type.
-            },
+            }
             Value::Enum(_) => unimplemented!("Enum validation"),
             Value::Null | Value::List(_) => true,
         };
@@ -358,28 +381,40 @@ fn validate_variables(
     Ok(())
 }
 
-pub fn query_value_to_json(value: &graphql_parser::query::Value) -> Result<json::Value, QueryValidationError> {
+pub fn query_value_to_json(
+    value: &graphql_parser::query::Value,
+) -> Result<json::Value, QueryValidationError> {
     use graphql_parser::query::Value;
 
     match value {
         Value::Boolean(b) => Ok(json::Value::Bool(*b)),
-        Value::Enum(variant) => Ok(json::Value::String(variant.to_string())),
+        Value::Enum(variant) => {
+            let variant = variant.as_str();
+            Ok(json!({ variant: null }))
+        }
         Value::Float(n) => Ok(json!(n)),
-        Value::Int(n) => { let n = n.as_i64().unwrap(); Ok(json!(n)) },
+        Value::Int(n) => {
+            let n = n.as_i64().unwrap();
+            Ok(json!(n))
+        }
         Value::String(s) => Ok(json!(s)),
         Value::Variable(_) => unreachable!("variable in variable definition"),
         Value::List(items) => {
-            let inner: Result<Vec<json::Value>, _> = items.iter().map(query_value_to_json).collect();
+            let inner: Result<Vec<json::Value>, _> =
+                items.iter().map(query_value_to_json).collect();
             let inner = inner?;
             Ok(json::Value::Array(inner))
-        },
+        }
         Value::Object(object) => {
-            let map: Result<json::Map<_, _>, _> = object.iter().map(|(k, v)| {
-                let json_v = query_value_to_json(v)?;
-                Ok((k.to_string(), json_v))
-            }).collect();
+            let map: Result<json::Map<_, _>, _> = object
+                .iter()
+                .map(|(k, v)| {
+                    let json_v = query_value_to_json(v)?;
+                    Ok((k.to_string(), json_v))
+                })
+                .collect();
             Ok(json::Value::Object(map?))
-        },
+        }
         Value::Null => Ok(json!(null)),
     }
 }
@@ -562,7 +597,10 @@ mod tests {
             (Value::Boolean(true), json::Value::Bool(true)),
             (Value::Float(33.4), json!(33.4)),
             (Value::Null, json!(null)),
-            (Value::String("Ravelociraptor".to_string()), json!("Ravelociraptor")),
+            (
+                Value::String("Ravelociraptor".to_string()),
+                json!("Ravelociraptor"),
+            ),
         ];
 
         for case in cases {

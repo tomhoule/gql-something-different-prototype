@@ -68,10 +68,12 @@ impl ImplCoerce for ArgumentsContext {
                             .iter()
                             .find(|(name, _)| name == #literal)
                             .and_then(|(_, value)| {
-                                if let #argument_type(_) = value {
-                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).ok()
-                                } else {
-                                    None
+                                match value {
+                                    #argument_type(_) => {
+                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).ok()
+                                    }
+                                    ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                    _ => None,
                                 }
                             }).ok_or(::tokio_gql::coercion::CoercionError)?;
                     }
@@ -84,10 +86,12 @@ impl ImplCoerce for ArgumentsContext {
                                 .iter()
                                 .find(|(name, _)| name == #literal)
                                 .map(|(_, value)| {
-                                    if let #argument_type(_) = value {
-                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
-                                    } else {
-                                        None
+                                    match value {
+                                        #argument_type(_) => {
+                                            <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                        },
+                                        ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                        _ => None,
                                     }
                                 }).or(<#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(&#default_literal).ok())
                                 .ok_or(::tokio_gql::coercion::CoercionError)?;
@@ -99,10 +103,12 @@ impl ImplCoerce for ArgumentsContext {
                                 .iter()
                                 .find(|(name, _)| name == #literal)
                                 .map(|(_, value)| {
-                                    if let #argument_type(_) = value {
-                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
-                                    } else {
-                                        None
+                                    match value {
+                                        #argument_type(_) => {
+                                            <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                        },
+                                        ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                        _ => None,
                                     }
                                 }).ok_or(::tokio_gql::coercion::CoercionError)?;
                         }

@@ -25,7 +25,7 @@ pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -
 
     quote!{
         #doc_attr
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Deserialize)]
         pub struct #name {
             #(#values: #types),* ,
         }
@@ -35,7 +35,6 @@ pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -
 #[cfg(test)]
 mod tests {
     use context::DeriveContext;
-    use graphql_parser;
 
     #[test]
     fn simple_input_object_derive() {
@@ -52,7 +51,7 @@ mod tests {
             }
             "## => {
                 #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
                 pub struct Point {
                     x: i32,
                     y: i32,

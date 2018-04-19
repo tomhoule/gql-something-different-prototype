@@ -1,6 +1,10 @@
 #[macro_use]
 extern crate tokio_gql;
-extern crate serde_json as json;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+#[macro_use]
+extern crate serde_json;
 
 extern crate graphql_parser;
 use graphql_parser::query::*;
@@ -23,7 +27,7 @@ fn test_coercion<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq
     query: &str,
     expected_result: Result<SchemaType, CoercionError>,
 ) {
-    let context = tokio_gql::query_validation::ValidationContext::new(json::Map::new());
+    let context = tokio_gql::query_validation::ValidationContext::new(serde_json::Map::new());
     test_coercion_with_context(context, query, expected_result);
 }
 
@@ -157,7 +161,7 @@ fn multiple_arguments_coercion() {
 
 #[test]
 fn coercion_with_optional_variable_on_optional_field() {
-    let context = tokio_gql::query_validation::ValidationContext::new(json::Map::new());
+    let context = tokio_gql::query_validation::ValidationContext::new(serde_json::Map::new());
     test_coercion_with_context::<Schema>(
         context,
         r###"
@@ -262,7 +266,6 @@ fn optional_object_argument_coercion_with_null() {
 
 #[test]
 fn arguments_with_composed_names() {
-    // TODO: test with composed names (with underscores, different case)
     test_coercion::<Schema>(
         r##"
         query {
@@ -408,4 +411,153 @@ fn default_values() {
             }],
         }),
     )
+}
+
+#[test]
+fn enum_variable() {
+    let variables =
+        if let serde_json::Value::Object(map) = json!({ "favourite_episode": { "JEDI": null } }) {
+            map
+        } else {
+            panic!()
+        };
+    let context = tokio_gql::query_validation::ValidationContext::new(variables);
+    test_coercion_with_context::<star_wars::Schema>(
+        context,
+        r##"
+        query Query($favourite_episode: Episode!) {
+            hero(episode: $favourite_episode) {
+                name
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Hero {
+                episode: Some(star_wars::Episode::Jedi),
+                selection: vec![star_wars::Character::Name],
+            }],
+        }),
+    )
+}
+
+#[test]
+fn string_variable() {
+    let variables = if let serde_json::Value::Object(map) =
+        json!({ "maybe_millenium_falcon": "Millenium Falcon!!!" })
+    {
+        map
+    } else {
+        panic!()
+    };
+    let context = tokio_gql::query_validation::ValidationContext::new(variables);
+    test_coercion_with_context::<star_wars::Schema>(
+        context,
+        r##"
+        query Query($maybe_millenium_falcon: ID) {
+            starship(id: $maybe_millenium_falcon) {
+                name
+            }
+        }
+        "##,
+        Ok(star_wars::Schema {
+            mutation: Vec::new(),
+            subscription: Vec::new(),
+            query: vec![star_wars::Query::Starship {
+                id: "Millenium Falcon!!!".to_string(),
+                selection: vec![star_wars::Starship::Name],
+            }],
+        }),
+    )
+}
+
+#[test]
+fn input_object_variable() {
+    let variables = if let serde_json::Value::Object(map) =
+        json!({ "good_dog": { "name": "Waffles", "weight": 12 } })
+    {
+        map
+    } else {
+        panic!()
+    };
+    let context = tokio_gql::query_validation::ValidationContext::new(variables);
+    test_coercion_with_context::<Schema>(
+        context,
+        r##"
+        query User($good_dog: Dog) {
+            petDog(dog: $good_dog)
+        }
+        "##,
+        Ok(Schema {
+            query: vec![User::PetDog {
+                dog: Some(Dog {
+                    name: "Waffles".to_string(),
+                    weight: 12,
+                    has_chip: None,
+                    vaccinated: None,
+                }),
+            }],
+        }),
+    )
+}
+
+#[test]
+fn missing_variables() {
+    let variables = if let serde_json::Value::Object(map) = json!({
+            "email_index": null,
+            "my_number": 43,
+        }) {
+        map
+    } else {
+        panic!()
+    };
+    let context = tokio_gql::query_validation::ValidationContext::new(variables);
+    test_coercion_with_context::<Schema>(
+        context,
+        r##"
+        query User($email_index: Int, $my_number: Int!, $verbose_number: String) {
+            compare(a: $verbose_number, b: $my_number)
+            getInbox(index: $email_index)
+            double(num: $my_number)
+        }
+        "##,
+        Ok(Schema {
+            query: vec![
+                User::Compare {
+                    a: None,
+                    b: Some(43),
+                },
+                User::GetInbox {
+                    index: None,
+                    selection: vec![],
+                },
+                User::Double { num: 43 },
+            ],
+        }),
+    )
+}
+
+#[test]
+fn other_primitive_variable_types() {
+    let variables =
+        if let serde_json::Value::Object(map) = json!({ "numbers": [12, 83, 38, -20, 10000] }) {
+            map
+        } else {
+            panic!()
+        };
+    let context = tokio_gql::query_validation::ValidationContext::new(variables);
+    test_coercion_with_context::<Schema>(
+        context,
+        r##"
+        query User($numbers: [Int]) {
+            allPrimes(nums: $numbers)
+        }
+        "##,
+        Ok(Schema {
+            query: vec![User::AllPrimes {
+                nums: Some(vec![Some(12), Some(83), Some(38), Some(-20), Some(10000)]),
+            }],
+        }),
+    );
 }

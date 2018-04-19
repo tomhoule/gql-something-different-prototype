@@ -193,7 +193,7 @@ mod tests {
                     Name
                 }
 
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
                 pub struct CookingInstructions {
                     temperature: i32,
                     pressure: Option<bool>,
@@ -201,7 +201,7 @@ mod tests {
                     additional: Option<SpecialInstructions>,
                 }
 
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
                 pub struct SpecialInstructions {
                     cooking_time: Option<i32>,
                     this_is_redundant: Option<String>,

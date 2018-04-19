@@ -18,7 +18,8 @@ pub fn gql_enum_to_rs(enum_type: &EnumType) -> quote::Tokens {
     };
     quote!{
         #doc_attr
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Deserialize)]
+        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
         pub enum #name {
             #(#values),* ,
         }
@@ -28,7 +29,6 @@ pub fn gql_enum_to_rs(enum_type: &EnumType) -> quote::Tokens {
 #[cfg(test)]
 mod tests {
     use context::DeriveContext;
-    use graphql_parser;
 
     #[test]
     fn enum_derive() {
@@ -40,7 +40,8 @@ mod tests {
                 CORGI
             }
             "## => {
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
+                #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
                 pub enum Dog {
                     Golden,
                     Chihuahua,
@@ -65,7 +66,8 @@ mod tests {
             }
             "## => {
                 #[doc = "The bread kinds supported by this app.\n\n[Bread](https://en.wikipedia.org/wiki/bread) on wikipedia.\n"]
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
+                #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
                 pub enum BreadKind {
                     White,
                     FullGrain,

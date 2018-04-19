@@ -49,7 +49,6 @@ where
                 })
                 .or_else(move |err| {
                     let mut res = hyper::Response::new();
-                    println!("{:?}", err);
                     let resolver: &Resolver = &cloned.resolver;
                     let body_string = json::to_string(&resolver.handle_errors(err)).unwrap();
                     res.set_body(body_string);

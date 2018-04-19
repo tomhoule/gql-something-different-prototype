@@ -21,7 +21,6 @@ pub fn gql_union_to_rs(union_type: &UnionType, _context: &DeriveContext) -> quot
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphql_parser::schema::*;
 
     #[test]
     fn unions() {

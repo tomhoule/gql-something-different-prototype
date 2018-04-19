@@ -15,7 +15,6 @@ impl ImplCoerce for UnionType {
                 if let Some(::tokio_gql::graphql_parser::query::TypeCondition::On(ref name)) = fragment.type_condition {
                     if name == #ty {
                         let coerced_inner = <#ty_term as ::tokio_gql::coercion::CoerceSelection>::coerce(&fragment.selection_set, &context);
-                        println!("coerced_inner: {:?}", coerced_inner);
                         results.push(#name_term::#variant_term(coerced_inner?));
                     }
                 }
@@ -39,7 +38,6 @@ impl ImplCoerce for UnionType {
 
                         }
                     }
-                    println!("returning {:?}", results);
                     Ok(results)
                 }
             }
