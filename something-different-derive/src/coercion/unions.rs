@@ -4,11 +4,12 @@ use graphql_parser::schema::*;
 use proc_macro2::{Span, Term};
 use quote;
 
-impl ImplCoerce for UnionType {
-    fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
-        let name_term: Term = Term::new(&self.name, Span::call_site());
-
-        let field_matchers = self.types.iter().map(|ty| {
+pub fn spread_matchers_for_types<'a>(
+    name_term: Term,
+    types: impl Iterator<Item = &'a String>,
+) -> Vec<quote::Tokens> {
+    types
+        .map(|ty| {
             let variant_term = Term::new(&format!("On{}", ty), Span::call_site());
             let ty_term = Term::new(ty, Span::call_site());
             quote! {
@@ -19,7 +20,15 @@ impl ImplCoerce for UnionType {
                     }
                 }
             }
-        });
+        })
+        .collect()
+}
+
+impl ImplCoerce for UnionType {
+    fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
+        let name_term = Term::new(&self.name, Span::call_site());
+
+        let field_matchers = spread_matchers_for_types(name_term.clone(), self.types.iter());
 
         quote! {
             impl ::tokio_gql::coercion::CoerceSelection for #name_term {
