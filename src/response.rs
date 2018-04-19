@@ -45,7 +45,7 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
         mut self,
         fields: impl IntoIterator<Item = T>,
         handler: impl Fn(&T, Response<Error>) -> ResponseValue<Error>,
-    ) -> Self {
+    ) -> ResponseValue<Error> {
         for field in fields {
             let path_suffix = field.as_path_fragment();
             let mut full_path = self.path.clone();
@@ -57,7 +57,7 @@ impl<Error: Debug + PartialEq + 'static> Response<Error> {
                 ResponseValue::Skip => (),
             }
         }
-        self
+        ResponseValue::Node(self.into_future())
     }
 
     /// Sets the value on `key` at the current path in the response tree.
@@ -101,12 +101,12 @@ impl<Error: 'static> IntoFuture for Response<Error> {
     }
 }
 
-impl<Error: 'static> From<Response<Error>> for ResponseValue<Error> {
-    fn from(res: Response<Error>) -> ResponseValue<Error> {
-        let key = res.path.get(res.path.len() - 1).unwrap_or(&"data").clone();
-        rest(res.into_future().map(move |value| json!({ *key: value })))
-    }
-}
+// impl<Error: 'static> From<Response<Error>> for ResponseValue<Error> {
+//     fn from(res: Response<Error>) -> ResponseValue<Error> {
+//         let key = res.path.get(res.path.len() - 1).unwrap_or(&"data").clone();
+//         rest(res.into_future().map(move |value| json!({ *key: value })))
+//     }
+// }
 
 pub enum ResponseValue<Error> {
     Node(Box<Future<Item = json::Value, Error = Error>>),
@@ -132,6 +132,19 @@ pub fn rest<Error>(
 
 pub fn skip<Error>() -> ResponseValue<Error> {
     ResponseValue::Skip
+}
+
+impl<Error: 'static> IntoFuture for ResponseValue<Error> {
+    type Item = json::Value;
+    type Error = Error;
+    type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
+
+    fn into_future(self) -> Self::Future {
+        match self {
+            ResponseValue::Node(fut) => fut,
+            ResponseValue::Skip => Box::new(::futures::future::ok(json!({}))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -249,56 +262,6 @@ mod tests {
     }
 
     #[test]
-    fn nested_response() {
-        let dogs_request = vec![SomeField::Dogs {
-            selection: vec![
-                Dog::Name,
-                Dog::Fluffiness,
-                Dog::Skills {
-                    selection: vec![DogSkills::CanJump],
-                },
-            ],
-            puppies_only: false,
-        }];
-
-        let response = Response::<Error>::new().on(dogs_request, |req, res| match req {
-            SomeField::Dogs { selection, .. } => {
-                let default_response = json!({
-                    "name": "Laika",
-                    "age": 2,
-                    "unrelated_field": [3, 4, 5],
-                });
-
-                let skills_field = selection
-                    .iter()
-                    .filter(|dog| matches!(dog, Dog::Skills { .. }));
-
-                leaf(
-                    req,
-                    res.on(skills_field, |req, _res| {
-                        leaf(req, Ok(json!({ "can_jump": true, "can_sit": true })))
-                    }).merge(default_response),
-                )
-            }
-            SomeField::Cats { .. } => unreachable!(),
-        });
-
-        let resolved = response.into_future().wait().unwrap();
-
-        assert_eq!(
-            resolved,
-            json!({
-                "dogs": {
-                    "name": "Laika",
-                    "age": 2,
-                    "unrelated_field": [3, 4, 5],
-                    "skills": { "can_jump": true, "can_sit": true },
-                }
-            })
-        );
-    }
-
-    #[test]
     fn multi_field_nested_response() {
         let dogs_request = vec![SomeField::Dogs {
             selection: vec![
@@ -312,7 +275,7 @@ mod tests {
             puppies_only: false,
         }];
 
-        fn resolve_skills(res: Response<Error>, skills: &[DogSkills]) -> Response<Error> {
+        fn resolve_skills(res: Response<Error>, skills: &[DogSkills]) -> ResponseValue<Error> {
             res.on(skills, |req, res| match req {
                 DogSkills::CanSit => leaf(req, Ok(json!(true))),
                 DogSkills::CanSwim => leaf(req, Ok(json!(true))),
@@ -326,7 +289,7 @@ mod tests {
                 Dog::Skills { selection } => leaf(req, resolve_skills(res, selection)),
                 Dog::FetchBall => leaf(req, Ok(json!("doing a bamboozle"))),
                 _ => skip(),
-            }).into(),
+            }),
             SomeField::Cats { .. } => unreachable!(),
         });
 
@@ -335,10 +298,8 @@ mod tests {
         assert_eq!(
             resolved,
             json!({
-                "dogs": {
-                    "skills": { "CanJump": true },
-                    "fetch_ball": "doing a bamboozle"
-                }
+                "skills": { "CanJump": true },
+                "fetch_ball": "doing a bamboozle"
             })
         );
     }
