@@ -130,7 +130,7 @@ pub fn query_value_to_tokens(value: &::graphql_parser::query::Value) -> quote::T
         }
         Value::Float(num) => quote!(#prefix::Float(#num)),
         Value::String(s) => quote!(#prefix::String(#s.to_string())),
-        Value::Boolean(b) => quote!(#prefix::#b),
+        Value::Boolean(b) => quote!(#b),
         Value::Null => unimplemented!("null as default value"),
         Value::Enum(en) => quote!(#prefix::Enum(#en.to_string())),
         Value::List(list) => {
