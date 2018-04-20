@@ -17,6 +17,7 @@ mod enums;
 mod inputs;
 mod interfaces;
 mod objects;
+mod path_fragment;
 mod unions;
 
 use coercion::*;
@@ -53,6 +54,7 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let mut definitions = Vec::new();
     gql_document_to_rs(&mut definitions, &context);
     let coerce_impls = coerce_impls(&context);
+    let path_fragment_impls = path_fragment::path_fragment_impls(&context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
@@ -60,6 +62,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
         #(#definitions)*
 
         #(#coerce_impls)*
+
+        #(#path_fragment_impls)*
     }
 }
 
