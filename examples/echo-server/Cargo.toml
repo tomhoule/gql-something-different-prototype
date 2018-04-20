@@ -1,0 +1,12 @@
+[package]
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+name = "echo-server"
+version = "0.1.0"
+[dependencies]
+futures = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+
+[dependencies.tokio-gql]
+path = "../.."

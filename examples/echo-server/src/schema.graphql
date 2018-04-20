@@ -1,0 +1,12 @@
+type EchoQuery {
+  pastEchoes: [String!]!
+}
+
+type EchoMutation {
+  echo(message: String): String!
+}
+
+schema {
+  query: EchoQuery
+  mutation: EchoMutation
+}
