@@ -50,10 +50,7 @@ pub fn get_field_names<'a>(
                 if context.is_scalar(field_type_name) || context.is_enum(field_type_name) {
                     None
                 } else {
-                    Some(Term::new(
-                        field_type_name.to_camel_case().as_str(),
-                        Span::call_site(),
-                    ))
+                    Some(Term::new(field_type_name, Span::call_site()))
                 };
             let sub_field_set: Option<quote::Tokens> =
                 sub_field_set.map(|set| quote!{ selection: Vec<#set>, });

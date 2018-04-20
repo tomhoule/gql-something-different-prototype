@@ -13,6 +13,7 @@ pub extern crate graphql_parser;
 pub mod coercion;
 pub mod errors;
 pub mod identifiable;
+pub mod introspection;
 pub mod query_validation;
 pub mod response;
 pub mod service;

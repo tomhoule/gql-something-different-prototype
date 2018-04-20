@@ -93,8 +93,8 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
     coerce_impls.push(
         context
             .get_schema()
-            .expect("Schema is present")
-            .impl_coerce(&context),
+            .map(|schema| schema.impl_coerce(&context))
+            .unwrap_or(quote!()),
     );
 
     coerce_impls

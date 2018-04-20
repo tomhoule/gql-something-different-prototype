@@ -21,5 +21,6 @@ members = [
     "examples/echo-server",
     "examples/library",
     "examples/library/included_library",
+    "introspection",
     "something-different-derive",
 ]
