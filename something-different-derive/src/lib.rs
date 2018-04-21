@@ -57,6 +57,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let coerce_impls = coerce_impls(&context);
     let path_fragment_impls = path_fragment::path_fragment_impls(&context);
 
+    let introspection_constants = introspection::introspect::introspect_context(&context);
+
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
 
@@ -65,6 +67,8 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
         #(#coerce_impls)*
 
         #(#path_fragment_impls)*
+
+        #introspection_constants
     }
 }
 

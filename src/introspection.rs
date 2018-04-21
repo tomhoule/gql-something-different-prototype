@@ -1,11 +1,11 @@
 //! These types are directly adapted from the introspection schema.
-//! See https://gist.github.com/craigbeck/b90915d49fda19d5b2b17ead14dcd6da
+//! See https://github.com/facebook/graphql/blob/master/spec/Section%204%20--%20Introspection.md
 
 pub struct Directive {
     pub name: &'static str,
     pub description: Option<&'static str>,
-    pub locations: Vec<DirectiveLocation>,
-    pub args: Vec<InputValue>,
+    pub locations: &'static [DirectiveLocation],
+    pub args: &'static [InputValue],
 }
 
 pub enum TypeKind {
@@ -22,7 +22,7 @@ pub enum TypeKind {
 pub struct InputValue {
     pub name: &'static str,
     pub description: Option<&'static str>,
-    pub type_: Type,
+    pub type_: &'static str,
     pub default_value: Option<&'static str>,
 }
 
@@ -35,9 +35,9 @@ pub struct EnumValue {
 
 pub struct Field {
     pub name: &'static str,
-    pub description: &'static str,
-    pub args: Vec<InputValue>,
-    pub type_: Type,
+    pub description: Option<&'static str>,
+    pub args: &'static [InputValue],
+    pub type_: &'static str,
     pub is_deprecated: bool,
     pub deprecation_reason: Option<&'static str>,
 }
@@ -46,15 +46,15 @@ pub struct Type {
     pub kind: TypeKind,
     pub name: Option<&'static str>,
     pub description: Option<&'static str>,
-    pub fields: Vec<Field>,
+    pub fields: &'static [Field],
 }
 
 pub struct Schema {
-    pub types: Vec<Type>,
-    pub query_type: Option<Type>,
-    pub mutation_type: Option<Type>,
-    pub subscription_type: Option<Type>,
-    pub directives: Vec<Directive>,
+    pub types: &'static [Type],
+    pub query_type: Option<&'static str>,
+    pub mutation_type: Option<&'static str>,
+    pub subscription_type: Option<&'static str>,
+    pub directives: &'static [Directive],
 }
 
 pub enum DirectiveLocation {
