@@ -13,11 +13,11 @@ pub extern crate graphql_parser;
 pub mod coercion;
 pub mod errors;
 pub mod identifiable;
+pub mod introspection;
 pub mod query_validation;
 pub mod response;
 pub mod service;
 mod shared;
-pub mod standalone_server;
 
 #[allow(unused_imports)]
 #[macro_use]

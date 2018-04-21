@@ -26,8 +26,8 @@ impl ImplCoerce for ObjectType {
                             ::tokio_gql::graphql_parser::query::Selection::Field(ref field) => {
                                 #field_matchers
                             }
-                            ::tokio_gql::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!(),
-                            ::tokio_gql::graphql_parser::query::Selection::InlineFragment(_) => unimplemented!(),
+                            ::tokio_gql::graphql_parser::query::Selection::FragmentSpread(_) => unimplemented!("fragment spreads are unimplemented"),
+                            ::tokio_gql::graphql_parser::query::Selection::InlineFragment(_) => unimplemented!("inline fragments are unimplemented"),
 
                         }
                     }

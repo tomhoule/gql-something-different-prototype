@@ -8,12 +8,17 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+#[macro_use]
+mod shared;
+
 mod coercion;
 mod context;
 mod enums;
 mod inputs;
+mod interfaces;
+mod introspection;
 mod objects;
-mod shared;
+mod path_fragment;
 mod unions;
 
 use coercion::*;
@@ -50,6 +55,9 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
     let mut definitions = Vec::new();
     gql_document_to_rs(&mut definitions, &context);
     let coerce_impls = coerce_impls(&context);
+    let path_fragment_impls = path_fragment::path_fragment_impls(&context);
+
+    let introspection_constants = introspection::introspect::introspect_context(&context);
 
     quote! {
         pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
@@ -57,6 +65,10 @@ fn impl_something_different(ast: &syn::DeriveInput) -> quote::Tokens {
         #(#definitions)*
 
         #(#coerce_impls)*
+
+        #(#path_fragment_impls)*
+
+        #introspection_constants
     }
 }
 
@@ -79,11 +91,15 @@ fn coerce_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         coerce_impls.push(union_type.impl_coerce(&context));
     }
 
+    for interface_type in context.interface_types.values() {
+        coerce_impls.push(interface_type.impl_coerce(&context));
+    }
+
     coerce_impls.push(
         context
             .get_schema()
-            .expect("Schema is present")
-            .impl_coerce(&context),
+            .map(|schema| schema.impl_coerce(&context))
+            .unwrap_or(quote!()),
     );
 
     coerce_impls
@@ -138,11 +154,11 @@ fn extract_definitions(document: &graphql_parser::schema::Document, context: &mu
                     context.insert_interface(interface_type.clone());
                 }
             },
-            Definition::DirectiveDefinition(_) => unimplemented!(),
+            Definition::DirectiveDefinition(_) => unimplemented!("directive definition"),
             Definition::SchemaDefinition(schema_definition) => {
                 context.set_schema(schema_definition.clone())
             }
-            Definition::TypeExtension(_) => unimplemented!(),
+            Definition::TypeExtension(_) => unimplemented!("type extension"),
         };
     }
 }
@@ -164,25 +180,25 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         buf.push(unions::gql_union_to_rs(union_type, &context));
     }
 
-    for _interface_type in context.interface_types.values() {
-        unimplemented!();
+    for interface_type in context.interface_types.values() {
+        buf.push(interfaces::gql_interface_to_rs(interface_type, &context));
     }
 
     if let Some(ref schema_definition) = context.get_schema() {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
             let object_name = Term::new(query.as_str(), Span::call_site());
-            fields.push(quote!(query: Vec<#object_name>));
+            fields.push(quote!(pub query: Vec<#object_name>));
         }
 
         if let Some(ref mutation) = schema_definition.mutation {
             let object_name = Term::new(mutation.as_str(), Span::call_site());
-            fields.push(quote!(mutation: Vec<#object_name>));
+            fields.push(quote!(pub mutation: Vec<#object_name>));
         }
 
         if let Some(ref subscription) = schema_definition.subscription {
             let object_name = Term::new(subscription.as_str(), Span::call_site());
-            fields.push(quote!(subscription: Vec<#object_name>));
+            fields.push(quote!(pub subscription: Vec<#object_name>));
         }
 
         buf.push(quote!{
@@ -197,116 +213,6 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphql_parser::schema::*;
-    /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
-
-    macro_rules! assert_expands_to {
-        ($gql_string:expr => $expanded:tt) => {
-            let gql = $gql_string;
-            let parsed = parse_schema(gql).unwrap();
-            let mut buf = Vec::new();
-            let mut context = DeriveContext::new();
-            extract_definitions(&parsed, &mut context);
-            gql_document_to_rs(&mut buf, &context);
-            let got = quote!(#(#buf)*);
-            let expected = quote! $expanded ;
-            assert_eq!(expected, got);
-        };
-    }
-
-    #[test]
-    fn basic_object_derive() {
-        assert_expands_to! {
-            r#"
-            type Pasta {
-                shape: String!
-                ingredients: [String!]!
-            }
-            "# => {
-                #[derive(Debug, PartialEq)]
-                pub enum Pasta { Shape, Ingredients }
-            }
-        }
-    }
-
-    #[test]
-    fn object_derive_with_scalar_input() {
-        assert_expands_to! {
-            r#"
-            type Pasta {
-                shape(strict: Boolean): String!
-                ingredients(filter: String!): [String!]!
-            }
-            "# => {
-                #[derive(Debug, PartialEq)]
-                pub enum Pasta {
-                    Shape { strict: Option<bool> },
-                    Ingredients { filter: String }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn object_derive_with_description_string() {
-        assert_expands_to!{
-            r##"
-            """
-            Represents a point on the plane.
-            """
-            type Point {
-                x: Int!
-                y: Int!
-            }
-            "## => {
-                #[doc = "Represents a point on the plane.\n"]
-                #[derive(Debug, PartialEq)]
-                pub enum Point { X, Y }
-            }
-        }
-    }
-
-    #[test]
-    fn object_derive_with_nested_field() {
-        assert_expands_to! {
-            r##"
-                type DessertDescriptor {
-                    name: String!
-                    contains_chocolate: Boolean
-                }
-
-                type Cheese {
-                    name: String!
-                    blue: Boolean
-                }
-
-                type Meal {
-                    main_course: String!
-                    cheese(vegan: Boolean): Cheese
-                    dessert: DessertDescriptor!
-                }
-            "## => {
-                #[derive(Debug, PartialEq)]
-                pub enum DessertDescriptor {
-                    Name,
-                    ContainsChocolate
-                }
-
-                #[derive(Debug, PartialEq)]
-                pub enum Cheese {
-                    Name,
-                    Blue
-                }
-
-                #[derive(Debug, PartialEq)]
-                pub enum Meal {
-                    MainCourse,
-                    Cheese { selection: Vec<Cheese>, vegan: Option<bool> },
-                    Dessert { selection: Vec<DessertDescriptor>, }
-                }
-            }
-        }
-    }
 
     #[test]
     fn schema_definition() {
@@ -320,9 +226,9 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub struct Schema {
-                    query: Vec<MyQuery>,
-                    mutation: Vec<AMutation>,
-                    subscription: Vec<TheSubscription>,
+                    pub query: Vec<MyQuery>,
+                    pub mutation: Vec<AMutation>,
+                    pub subscription: Vec<TheSubscription>,
                 }
             }
         }
@@ -338,7 +244,7 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub struct Schema {
-                    query: Vec<SomeQuery>,
+                    pub query: Vec<SomeQuery>,
                 }
             }
         }

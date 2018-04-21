@@ -1,0 +1,11 @@
+[package]
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+name = "standalone-server"
+version = "0.1.0"
+[dependencies]
+futures = "0.1"
+hyper = "0.11.0"
+serde_json = "*"
+
+[dependencies.tokio-gql]
+path = ".."

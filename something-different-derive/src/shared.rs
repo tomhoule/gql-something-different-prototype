@@ -54,6 +54,7 @@ pub fn correspondant_type(gql_type: &str) -> &str {
         "String" => "String",
         "Double" => "f64",
         "Boolean" => "bool",
+        "ID" => "String",
         other => other,
     }
 }
@@ -79,7 +80,9 @@ pub fn value_variant_for_type(
     } else {
         let name = extract_inner_name(&value_type);
 
-        if context.is_scalar(name) {
+        if name == "ID" {
+            "String"
+        } else if context.is_scalar(name) {
             name
         } else if context.is_enum(name) {
             "Enum"
@@ -96,6 +99,60 @@ pub fn type_is_optional(value_type: &graphql_parser::schema::Type) -> bool {
         false
     } else {
         true
+    }
+}
+
+#[cfg(test)]
+macro_rules! assert_expands_to {
+    ($gql_string:expr => $expanded:tt) => {
+        let gql = $gql_string;
+        let parsed = ::graphql_parser::parse_schema(gql).unwrap();
+        let mut buf = Vec::new();
+        let mut context = DeriveContext::new();
+        ::extract_definitions(&parsed, &mut context);
+        ::gql_document_to_rs(&mut buf, &context);
+        let got = quote!(#(#buf)*);
+        let expected = quote! $expanded ;
+        assert_eq!(expected, got);
+    };
+}
+
+pub fn query_value_to_tokens(value: &::graphql_parser::query::Value) -> quote::Tokens {
+    use graphql_parser::query::Value;
+
+    let prefix = quote!(::tokio_gql::graphql_parser::query::Value);
+
+    match value {
+        Value::Variable(_) => unimplemented!("variable as default value"),
+        Value::Int(num) => {
+            let num = num.as_i64();
+            quote!(#prefix::Int(#num))
+        }
+        Value::Float(num) => quote!(#prefix::Float(#num)),
+        Value::String(s) => quote!(#prefix::String(#s.to_string())),
+        Value::Boolean(b) => quote!(#prefix::Boolean(#b)),
+        Value::Null => unimplemented!("null as default value"),
+        Value::Enum(en) => quote!(#prefix::Enum(#en.to_string())),
+        Value::List(list) => {
+            let inner: Vec<_> = list.iter().map(|v| query_value_to_tokens(v)).collect();
+            quote!(vec![
+                    #(#inner),*
+                ])
+        }
+        Value::Object(obj) => {
+            let inner: Vec<_> = obj.iter()
+                .map(|(k, v)| (k, query_value_to_tokens(v)))
+                .collect();
+            let keys = inner.iter().map(|(k, _v)| k);
+            let values = inner.iter().map(|(_k, v)| v);
+            quote! {
+                let mut map = ::std::collections::BTreeMap::new();
+                #(
+                    map.insert(#keys, #values);
+                )*
+                #prefix::Object(map)
+            }
+        }
     }
 }
 

@@ -25,7 +25,7 @@ pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -
 
     quote!{
         #doc_attr
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Deserialize)]
         pub struct #name {
             #(#values: #types),* ,
         }
@@ -35,22 +35,6 @@ pub fn gql_input_to_rs(input_type: &InputObjectType, _context: &DeriveContext) -
 #[cfg(test)]
 mod tests {
     use context::DeriveContext;
-    use graphql_parser;
-
-    /// This is repeated between test modules, we may have to create a test_support crate to overcome that limitation.
-    macro_rules! assert_expands_to {
-        ($gql_string:expr => $expanded:tt) => {
-            let gql = $gql_string;
-            let parsed = graphql_parser::parse_schema(gql).unwrap();
-            let mut buf = Vec::new();
-            let mut context = DeriveContext::new();
-            ::extract_definitions(&parsed, &mut context);
-            ::gql_document_to_rs(&mut buf, &context);
-            let got = quote!(#(#buf)*);
-            let expected = quote! $expanded ;
-            assert_eq!(expected, got);
-        };
-    }
 
     #[test]
     fn simple_input_object_derive() {
@@ -67,7 +51,7 @@ mod tests {
             }
             "## => {
                 #[doc = "A point in 2, 3 or 4 dimensions, because why not?\n"]
-                #[derive(Debug, PartialEq)]
+                #[derive(Debug, PartialEq, Deserialize)]
                 pub struct Point {
                     x: i32,
                     y: i32,

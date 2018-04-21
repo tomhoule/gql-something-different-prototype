@@ -1,0 +1,12 @@
+[package]
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+name = "introspection"
+version = "0.1.0"
+[dependencies]
+futures = "*"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+
+[dependencies.tokio-gql]
+path = ".."

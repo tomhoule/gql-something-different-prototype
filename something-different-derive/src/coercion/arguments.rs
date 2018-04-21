@@ -42,8 +42,6 @@ pub struct ArgumentsContext {
 impl ImplCoerce for ArgumentsContext {
     fn impl_coerce(&self, context: &DeriveContext) -> quote::Tokens {
         let matchers = self.fields.iter().map(|field| {
-            // we have to split this in two: required and optional arguments
-
             let variant_name = Term::new(&field.name.to_camel_case(), Span::call_site());
             let variant_name_literal = &field.name;
             let field_type_name = shared::extract_inner_name(&field.field_type);
@@ -70,26 +68,50 @@ impl ImplCoerce for ArgumentsContext {
                             .iter()
                             .find(|(name, _)| name == #literal)
                             .and_then(|(_, value)| {
-                                if let #argument_type(_) = value {
-                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).ok()
-                                } else {
-                                    None
+                                match value {
+                                    #argument_type(_) => {
+                                        <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).ok()
+                                    }
+                                    ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                    _ => None,
                                 }
                             }).ok_or(::tokio_gql::coercion::CoercionError)?;
                     }
                 } else {
-                    quote! {
-                        let #term = field
-                            .arguments
-                            .iter()
-                            .find(|(name, _)| name == #literal)
-                            .map(|(_, value)| {
-                                if let #argument_type(_) = value {
-                                    <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("Should be propagated as a CoercionError")
-                                } else {
-                                    None
-                                }
-                            }).ok_or(::tokio_gql::coercion::CoercionError)?;
+                    if let Some(ref default) = arg.default_value {
+                        let default_literal = shared::query_value_to_tokens(default);
+                        quote! {
+                            let #term = field
+                                .arguments
+                                .iter()
+                                .find(|(name, _)| name == #literal)
+                                .map(|(_, value)| {
+                                    match value {
+                                        #argument_type(_) => {
+                                            <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                        },
+                                        ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                        _ => None,
+                                    }
+                                }).or(<#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(&#default_literal).ok())
+                                .ok_or(::tokio_gql::coercion::CoercionError)?;
+                        }
+                    } else {
+                        quote! {
+                            let #term = field
+                                .arguments
+                                .iter()
+                                .find(|(name, _)| name == #literal)
+                                .map(|(_, value)| {
+                                    match value {
+                                        #argument_type(_) => {
+                                            <#coercion_target_type_name as ::tokio_gql::coercion::CoerceScalar>::coerce(value).expect("coercion on optional arguments cannot fail")
+                                        },
+                                        ::tokio_gql::graphql_parser::query::Value::Variable(name) => context.variables.get(name).and_then(|v| ::serde_json::from_value(v.clone()).ok()),
+                                        _ => None,
+                                    }
+                                }).ok_or(::tokio_gql::coercion::CoercionError)?;
+                        }
                     }
                 }
             });
@@ -128,7 +150,7 @@ fn field_variant_constructor(
         quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap(), #(#argument_idents_clone),* })
     } else if argument_idents.is_empty() {
         let field_type = Term::new(field_type_name, Span::call_site());
-        quote!(#field_name::#variant_name { selection: <#field_type as tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
+        quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
     } else {
         quote!(#field_name::#variant_name { #(#argument_idents_clone),* })
     }
