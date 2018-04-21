@@ -15,8 +15,8 @@ pub mod errors;
 pub mod identifiable;
 pub mod introspection;
 pub mod query_validation;
+pub mod resolver;
 pub mod response;
-pub mod service;
 mod shared;
 
 #[allow(unused_imports)]
