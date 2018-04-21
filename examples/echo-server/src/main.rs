@@ -3,6 +3,7 @@ extern crate tokio_gql;
 #[macro_use]
 extern crate serde_json;
 extern crate futures;
+extern crate standalone_server;
 
 use futures::prelude::*;
 use serde_json as json;
@@ -24,10 +25,6 @@ struct Error;
 impl tokio_gql::service::GqlService for EchoResolver {
     type Schema = schema::Schema;
     type Error = Error;
-
-    fn handle_errors(&self, errors: tokio_gql::errors::GqlError<Self::Error>) -> json::Value {
-        json!({})
-    }
 
     fn resolve(
         &self,
@@ -65,7 +62,7 @@ impl tokio_gql::service::GqlService for EchoResolver {
 }
 
 fn main() {
-    tokio_gql::standalone_server::StandaloneServer::new(EchoResolver {
+    standalone_server::StandaloneServer::new(EchoResolver {
         archive: Vec::new(),
     }).start()
         .unwrap()

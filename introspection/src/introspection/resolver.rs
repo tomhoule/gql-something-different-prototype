@@ -29,8 +29,4 @@ impl GqlService for IntrospectionResolver {
     ) -> Box<Future<Item = json::Value, Error = Self::Error>> {
         unimplemented!();
     }
-
-    fn handle_errors(&self, errors: ::tokio_gql::errors::GqlError<Self::Error>) -> json::Value {
-        unimplemented!();
-    }
 }
