@@ -23,4 +23,5 @@ members = [
     "examples/library/included_library",
     "introspection",
     "something-different-derive",
+    "standalone-server",
 ]

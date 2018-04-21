@@ -1,15 +1,20 @@
-use coercion::CoerceQueryDocument;
-use errors::GqlError;
+extern crate futures;
+extern crate hyper;
+#[macro_use]
+extern crate serde_json;
+extern crate tokio_gql;
+
 use futures::prelude::*;
-use graphql_parser;
-use hyper::{self,
-            server::{NewService, Service}};
-use json;
-use query_validation::ValidationContext;
-use response::Response;
-use service::GqlService;
+use hyper::server::{NewService, Service};
+use serde_json as json;
 use std::fmt::Debug;
 use std::sync::Arc;
+use tokio_gql::coercion::CoerceQueryDocument;
+use tokio_gql::errors::GqlError;
+use tokio_gql::graphql_parser;
+use tokio_gql::query_validation::ValidationContext;
+use tokio_gql::response::Response;
+use tokio_gql::service::GqlService;
 
 struct ServerWrapper<Server>(Arc<Server>);
 

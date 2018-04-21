@@ -18,7 +18,6 @@ pub mod query_validation;
 pub mod response;
 pub mod service;
 mod shared;
-pub mod standalone_server;
 
 #[allow(unused_imports)]
 #[macro_use]

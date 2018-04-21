@@ -2,6 +2,10 @@
 # source: https://github.com/facebook/graphql/blob/master/spec/Section%204%20--%20Introspection.md
 # Copied on 2018-04-20
 
+schema {
+  query: __Schema,
+}
+
 type __Schema {
   types: [__Type!]!
   queryType: __Type!
