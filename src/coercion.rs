@@ -20,8 +20,9 @@ pub trait CoerceSelection: Sized {
 }
 
 /// Coerces a response to match the query type.
+/// TODO: Figure out if we still need that. Probably not \o/
 pub trait CoerceResponse {
-    fn coerce(query: &Document, response: ::json::Value) -> ::json::Value;
+    fn coerce(query: &Document, response: ::serde_json::Value) -> ::serde_json::Value;
 }
 
 pub trait CoerceScalar: Sized {

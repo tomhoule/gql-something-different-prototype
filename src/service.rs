@@ -1,6 +1,6 @@
 use futures::prelude::*;
-use json;
 use response::Response;
+use serde_json as json;
 
 pub trait GqlService {
     type Schema;
@@ -9,6 +9,6 @@ pub trait GqlService {
     fn resolve(
         &self,
         request: Self::Schema,
-        response: Response<Self::Error>,
+        response: Response,
     ) -> Box<Future<Item = json::Value, Error = Self::Error>>;
 }

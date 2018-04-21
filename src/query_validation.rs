@@ -1,7 +1,7 @@
 use graphql_parser;
 use graphql_parser::query::*;
 use graphql_parser::schema;
-use json;
+use serde_json as json;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
@@ -290,7 +290,7 @@ pub fn type_matches(
     type_name: &str,
     schema: &graphql_parser::schema::Document,
 ) -> Result<(), QueryValidationError> {
-    use json::Value;
+    use serde_json::Value;
 
     match variable {
         Value::Array(_) => Err(QueryValidationError::VariableMismatch), // arrays are already handled in validate_variable
