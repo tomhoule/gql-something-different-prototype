@@ -16,6 +16,7 @@ mod context;
 mod enums;
 mod inputs;
 mod interfaces;
+mod introspection;
 mod objects;
 mod path_fragment;
 mod unions;
