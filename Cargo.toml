@@ -22,6 +22,7 @@ members = [
     "examples/library",
     "examples/library/included_library",
     "introspection",
+    "matchbox-cli",
     "matchbox-codegen",
     "something-different-derive",
     "standalone-server",

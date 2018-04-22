@@ -1,0 +1,8 @@
+[package]
+name = "matchbox-cli"
+version = "0.1.0"
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+
+[dependencies]
+matchbox-codegen = { path = "../matchbox-codegen" }
+structopt = "*"
