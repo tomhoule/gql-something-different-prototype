@@ -23,10 +23,9 @@ mod unions;
 
 use coercion::*;
 use context::DeriveContext;
-use proc_macro2::{Literal, Span, Term};
+use proc_macro2::{Span, Term};
 
 pub fn expand_schema(schema: &str) -> quote::Tokens {
-    let schema_as_string_literal = Literal::string(&schema);
     let schema = graphql_parser::parse_schema(&schema).expect("invalid schema");
     let mut context = DeriveContext::new();
     extract_definitions(&schema, &mut context);
@@ -38,8 +37,6 @@ pub fn expand_schema(schema: &str) -> quote::Tokens {
     let introspection_constants = introspection::introspect::introspect_context(&context);
 
     quote! {
-        pub const THE_SCHEMA: &'static str = #schema_as_string_literal;
-
         #(#definitions)*
 
         #(#coerce_impls)*
