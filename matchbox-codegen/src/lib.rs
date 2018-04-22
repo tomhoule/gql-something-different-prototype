@@ -19,6 +19,7 @@ mod interfaces;
 mod introspection;
 mod objects;
 mod path_fragment;
+mod responders;
 mod unions;
 
 use coercion::*;

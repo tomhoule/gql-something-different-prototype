@@ -1,5 +1,6 @@
-use context;
+use context::DeriveContext;
 use graphql_parser;
+use heck::*;
 use proc_macro2::{Span, Term};
 use quote;
 
@@ -73,7 +74,7 @@ pub fn is_list_type(gql_type: &graphql_parser::query::Type) -> bool {
 /// The variant to extract for that type
 pub fn value_variant_for_type(
     value_type: &graphql_parser::schema::Type,
-    context: &context::DeriveContext,
+    context: &DeriveContext,
 ) -> quote::Tokens {
     let inner_name = if is_list_type(&value_type) {
         "List"
@@ -153,6 +154,62 @@ pub fn query_value_to_tokens(value: &::graphql_parser::query::Value) -> quote::T
                 #prefix::Object(map)
             }
         }
+    }
+}
+
+/// Used for implementing responders
+pub fn schema_name_to_response_name(name: &str) -> String {
+    format!("{}Response", name)
+}
+
+/// Figure out the name of the responder for a field
+pub fn responder_type_name(field: graphql_parser::schema::Field) -> String {
+    unimplemented!();
+}
+
+pub fn graphql_type_to_response_type(
+    graphql_type: &graphql_parser::schema::Type,
+    context: &DeriveContext,
+) -> quote::Tokens {
+    use graphql_parser::schema::Type;
+
+    match graphql_type {
+        Type::ListType(items) => graphql_type_to_response_type_inner(&graphql_type, context, false),
+        Type::NamedType(ty) => graphql_type_to_response_type_inner(&graphql_type, context, false),
+        Type::NonNullType(inner) => graphql_type_to_response_type_inner(&inner, context, true),
+    }
+}
+
+fn graphql_type_to_response_type_inner(
+    gql_type: &graphql_parser::query::Type,
+    context: &DeriveContext,
+    non_null: bool,
+) -> quote::Tokens {
+    use graphql_parser::schema::Type;
+    let inner = match gql_type {
+        Type::ListType(items) => {
+            let inner = graphql_type_to_response_type_inner(&items, context, false);
+            quote!(Vec<#inner>)
+        }
+        Type::NamedType(ty) => {
+            if context.is_scalar(ty) {
+                let ty = Term::new(correspondant_type(ty), Span::call_site());
+                quote!(#ty)
+            } else if context.is_enum(ty) {
+                let ty = Term::new(&ty.to_camel_case(), Span::call_site());
+                quote!(#ty)
+            } else {
+                let ty = Term::new(&schema_name_to_response_name(&ty), Span::call_site());
+                quote!(#ty)
+            }
+        }
+        Type::NonNullType(ty) => graphql_type_to_response_type_inner(&ty, context, true),
+    };
+
+    if non_null {
+        inner
+    } else {
+        quote!(Option<#inner>)
     }
 }
 

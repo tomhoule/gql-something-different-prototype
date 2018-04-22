@@ -10,7 +10,6 @@ pub fn gql_type_to_rs(
     context: &DeriveContext,
 ) -> quote::Tokens {
     let name = Term::new(object_type.name.as_str(), Span::call_site());
-    // let struct_name_lit: syn::Lit = object_type.name.as_str().into();
     let field_names: Vec<quote::Tokens> = get_field_names(&object_type.fields, context);
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = object_type.description {
         let str_literal = Literal::string(doc_string.as_str());

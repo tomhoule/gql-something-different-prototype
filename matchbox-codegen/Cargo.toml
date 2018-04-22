@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Tom Houlé <tom@tomhoule.com>"]
 
 [dependencies]
-syn = "^0.13.0"
-proc-macro2 = "^0.3.0"
-graphql-parser = "^0.2.0"
-heck = "^0.3.0"
+syn = "0.13.0"
+proc-macro2 = "0.3.0"
+graphql-parser = "0.2.0"
+heck = "0.3.0"
 quote = "^0.5.1"
