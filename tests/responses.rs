@@ -17,14 +17,14 @@ mod star_wars {
 struct StarWarsResolver;
 
 impl Resolver for StarWarsResolver {
-    type Schema = star_wars::Schema;
+    type Schema = star_wars::Operation;
 
     fn resolve(&self, request: Self::Schema) -> ResolverFuture {
         unimplemented!();
     }
 }
 
-fn test_response(req: &star_wars::Schema, expected_response: json::Value) {}
+fn test_response(req: &star_wars::Operation, expected_response: json::Value) {}
 
 #[test]
 fn basic_sync_field() {

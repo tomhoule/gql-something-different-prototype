@@ -23,7 +23,7 @@ struct EchoResolver {
 struct Error;
 
 impl tokio_gql::service::GqlService for EchoResolver {
-    type Schema = schema::Schema;
+    type Schema = schema::Operation;
     type Error = Error;
 
     fn resolve(

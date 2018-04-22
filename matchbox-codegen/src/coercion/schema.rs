@@ -42,7 +42,7 @@ impl ImplCoerce for SchemaDefinition {
         let field_values_clone = field_values.clone();
 
         quote! {
-            impl ::tokio_gql::coercion::CoerceQueryDocument for Schema {
+            impl ::tokio_gql::coercion::CoerceQueryDocument for Operation {
                 fn coerce(
                     document: &::tokio_gql::graphql_parser::query::Document,
                     context: &::tokio_gql::query_validation::ValidationContext
@@ -70,7 +70,7 @@ impl ImplCoerce for SchemaDefinition {
                     Ok(
                         vec![
                             #(
-                                Schema::#operations { selection: #field_names_4 },
+                                Operation::#operations { selection: #field_names_4 },
                             )*
                         ]
                     )

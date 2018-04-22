@@ -54,10 +54,12 @@ pub fn introspect_context(context: &DeriveContext) -> quote::Tokens {
     };
 
     quote! {
+        #[allow(dead_code)]
         const INTROSPECTION_TYPES: &'static [::tokio_gql::introspection::Type] = &[
             #(#types),*
         ];
 
+        #[allow(dead_code)]
         const INTROSPECTION_SCHEMA: ::tokio_gql::introspection::Schema = #schema;
     }
 }

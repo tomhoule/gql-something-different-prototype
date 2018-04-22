@@ -154,7 +154,7 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
 
         buf.push(quote!{
             #[derive(Debug, PartialEq)]
-            pub enum Schema {
+            pub enum Operation {
                 #(#fields,)*
             }
         })
@@ -176,7 +176,7 @@ mod tests {
             }
             "## => {
                 #[derive(Debug, PartialEq)]
-                pub enum Schema {
+                pub enum Operation {
                     Query { selection: Vec<MyQuery> },
                     Mutation { selection: Vec<AMutation> },
                     Subscription { selection: Vec<TheSubscription> },
@@ -194,7 +194,7 @@ mod tests {
             }
             "## => {
                 #[derive(Debug, PartialEq)]
-                pub enum Schema {
+                pub enum Operation {
                     Query { selection: Vec<SomeQuery> },
                 }
             }
