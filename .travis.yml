@@ -4,9 +4,13 @@ rust:
   - beta
   - nightly
 cache: cargo
+before_script:
+  - rustup component add rustfmt-preview
 script:
+  - cargo fmt --all -- --write-mode=diff
   - |
     cargo test &&
     (cd something-different-derive && cargo test) &&
     (cd examples/basic && cargo build) &&
     (cd examples/library && cargo build)
+    (cd examples/echo-server && cargo build)
