@@ -7,39 +7,39 @@ use quote;
 
 impl ImplCoerce for SchemaDefinition {
     fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
-        let mut field_values: Vec<Term> = Vec::new();
-        let mut field_names: Vec<Term> = Vec::new();
+        let mut selection_types: Vec<Term> = Vec::new();
+        let mut variant_names: Vec<Term> = Vec::new();
         let mut operations: Vec<Term> = Vec::new();
 
         if let Some(ref name) = self.query {
             let name = Term::new(name.as_str(), Span::call_site());
-            field_values.push(name);
-            field_names.push(Term::new("query", Span::call_site()));
+            selection_types.push(name);
+            variant_names.push(Term::new("query", Span::call_site()));
             operations.push(Term::new("Query", Span::call_site()));
         }
 
         if let Some(ref name) = self.mutation {
             let name = Term::new(name.as_str(), Span::call_site());
-            field_values.push(name);
-            field_names.push(Term::new("mutation", Span::call_site()));
+            selection_types.push(name);
+            variant_names.push(Term::new("mutation", Span::call_site()));
             operations.push(Term::new("Mutation", Span::call_site()));
         }
 
         if let Some(ref name) = self.subscription {
             let name = Term::new(name.as_str(), Span::call_site());
-            field_values.push(name);
-            field_names.push(Term::new("subscription", Span::call_site()));
+            selection_types.push(name);
+            variant_names.push(Term::new("subscription", Span::call_site()));
             operations.push(Term::new("Subscription", Span::call_site()));
         }
 
-        let node_types: Vec<Term> = field_names
+        let node_types: Vec<Term> = variant_names
             .iter()
             .map(|name| Term::new(&format!("{}", name).to_camel_case(), Span::call_site()))
             .collect();
-        let field_names_2 = field_names.clone();
-        let field_names_3 = field_names.clone();
-        let field_names_4 = field_names.clone();
-        let field_values_clone = field_values.clone();
+        let variant_names_2 = variant_names.clone();
+        let variant_names_3 = variant_names.clone();
+        let variant_names_4 = variant_names.clone();
+        let selection_types_clone = selection_types.clone();
 
         quote! {
             impl ::tokio_gql::coercion::CoerceQueryDocument for Operation {
@@ -48,12 +48,12 @@ impl ImplCoerce for SchemaDefinition {
                     context: &::tokio_gql::query_validation::ValidationContext
                 ) -> Result<Vec<Self>, ::tokio_gql::coercion::CoercionError> {
                     #(
-                        let #field_names: Result<Vec<#field_values>, _> = document.definitions
+                        let #variant_names: Result<Vec<#selection_types>, _> = document.definitions
                             .iter()
                             .filter_map(|op| {
                                 if let ::tokio_gql::graphql_parser::query::Definition::Operation(::tokio_gql::graphql_parser::query::OperationDefinition::#node_types(ref definition)) = op {
                                     Some(
-                                        <#field_values_clone as ::tokio_gql::coercion::CoerceSelection>::coerce(
+                                        <#selection_types_clone as ::tokio_gql::coercion::CoerceSelection>::coerce(
                                             &definition.clone().selection_set,
                                             context,
                                         )
@@ -64,13 +64,13 @@ impl ImplCoerce for SchemaDefinition {
                             })
                             .next()
                             .unwrap_or(Ok(Vec::new()));
-                        let #field_names_2 = #field_names_3?;
+                        let #variant_names_2 = #variant_names_3?;
                     )*
 
                     Ok(
                         vec![
                             #(
-                                Operation::#operations { selection: #field_names_4 },
+                                Operation::#operations { selection: #variant_names_4 },
                             )*
                         ]
                     )
