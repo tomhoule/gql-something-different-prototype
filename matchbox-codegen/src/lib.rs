@@ -142,23 +142,23 @@ fn gql_document_to_rs(buf: &mut Vec<quote::Tokens>, context: &DeriveContext) {
         let mut fields: Vec<quote::Tokens> = Vec::new();
         if let Some(ref query) = schema_definition.query {
             let object_name = Term::new(query.as_str(), Span::call_site());
-            fields.push(quote!(pub query: Vec<#object_name>));
+            fields.push(quote!(Query { selection: Vec<#object_name> }));
         }
 
         if let Some(ref mutation) = schema_definition.mutation {
             let object_name = Term::new(mutation.as_str(), Span::call_site());
-            fields.push(quote!(pub mutation: Vec<#object_name>));
+            fields.push(quote!(Mutation { selection: Vec<#object_name> }));
         }
 
         if let Some(ref subscription) = schema_definition.subscription {
             let object_name = Term::new(subscription.as_str(), Span::call_site());
-            fields.push(quote!(pub subscription: Vec<#object_name>));
+            fields.push(quote!(Subscription { selection: Vec<#object_name> }));
         }
 
         buf.push(quote!{
             #[derive(Debug, PartialEq)]
-            pub struct Schema {
-                #(#fields),*,
+            pub enum Schema {
+                #(#fields,)*
             }
         })
     }
@@ -179,10 +179,10 @@ mod tests {
             }
             "## => {
                 #[derive(Debug, PartialEq)]
-                pub struct Schema {
-                    pub query: Vec<MyQuery>,
-                    pub mutation: Vec<AMutation>,
-                    pub subscription: Vec<TheSubscription>,
+                pub enum Schema {
+                    Query { selection: Vec<MyQuery> },
+                    Mutation { selection: Vec<AMutation> },
+                    Subscription { selection: Vec<TheSubscription> },
                 }
             }
         }
@@ -197,8 +197,8 @@ mod tests {
             }
             "## => {
                 #[derive(Debug, PartialEq)]
-                pub struct Schema {
-                    pub query: Vec<SomeQuery>,
+                pub enum Schema {
+                    Query { selection: Vec<SomeQuery> },
                 }
             }
         }

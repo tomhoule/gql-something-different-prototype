@@ -25,7 +25,7 @@ mod star_wars {
 
 fn test_coercion<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq>(
     query: &str,
-    expected_result: Result<SchemaType, CoercionError>,
+    expected_result: Result<Vec<SchemaType>, CoercionError>,
 ) {
     let context = tokio_gql::query_validation::ValidationContext::new(serde_json::Map::new());
     test_coercion_with_context(context, query, expected_result);
@@ -34,7 +34,7 @@ fn test_coercion<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq
 fn test_coercion_with_context<SchemaType: CoerceQueryDocument + ::std::fmt::Debug + PartialEq>(
     context: tokio_gql::query_validation::ValidationContext,
     query: &str,
-    expected_result: Result<SchemaType, CoercionError>,
+    expected_result: Result<Vec<SchemaType>, CoercionError>,
 ) {
     let query = parse_query(query).unwrap();
     let fields = SchemaType::coerce(&query, &context);
@@ -50,9 +50,9 @@ fn query_coercion_works() {
         greeting
     }
     "##;
-    let expected = Ok(Schema {
-        query: vec![User::LastName, User::Greeting],
-    });
+    let expected = Ok(vec![Schema::Query {
+        selection: vec![User::LastName, User::Greeting],
+    }]);
     test_coercion::<Schema>(query, expected);
 }
 
@@ -63,11 +63,11 @@ fn basic_argument_coercion() {
         sayHello(name: "Emilio")
     }
     "##;
-    let expected = Ok(Schema {
-        query: vec![User::SayHello {
+    let expected = Ok(vec![Schema::Query {
+        selection: vec![User::SayHello {
             name: Some("Emilio".to_string()),
         }],
-    });
+    }]);
     test_coercion::<Schema>(query, expected);
 }
 
@@ -79,9 +79,9 @@ fn optional_argument_coercion_none() {
         sayHello(name: null)
     }
     "##,
-        Ok(Schema {
-            query: vec![User::SayHello { name: None }],
-        }),
+        Ok(vec![Schema::Query {
+            selection: vec![User::SayHello { name: None }],
+        }]),
     );
 }
 
@@ -93,11 +93,11 @@ fn optional_argument_coercion_some() {
         sayHello(name: "Pikachu")
     }
     "##,
-        Ok(Schema {
-            query: vec![User::SayHello {
+        Ok(vec![Schema::Query {
+            selection: vec![User::SayHello {
                 name: Some("Pikachu".to_string()),
             }],
-        }),
+        }]),
     );
 }
 
@@ -110,9 +110,9 @@ fn wrong_argument_name_coercion() {
         sayHello(name: 33)
     }
     "##,
-        Ok(Schema {
-            query: vec![User::SayHello { name: None }],
-        }),
+        Ok(vec![Schema::Query {
+            selection: vec![User::SayHello { name: None }],
+        }]),
     );
 }
 
@@ -136,9 +136,9 @@ fn int_argument_coercion() {
             double(num: 4)
         }
         "##,
-        Ok(Schema {
-            query: vec![User::Double { num: 4 }],
-        }),
+        Ok(vec![Schema::Query {
+            selection: vec![User::Double { num: 4 }],
+        }]),
     )
 }
 
@@ -150,12 +150,12 @@ fn multiple_arguments_coercion() {
             compare(a: "fourty odd", b: 44)
         }
         "###,
-        Ok(Schema {
-            query: vec![User::Compare {
+        Ok(vec![Schema::Query {
+            selection: vec![User::Compare {
                 a: Some("fourty odd".to_string()),
                 b: Some(44),
             }],
-        }),
+        }]),
     );
 }
 
@@ -169,12 +169,12 @@ fn coercion_with_optional_variable_on_optional_field() {
             compare(a: $number_string, b: 44)
         }
         "###,
-        Ok(Schema {
-            query: vec![User::Compare {
+        Ok(vec![Schema::Query {
+            selection: vec![User::Compare {
                 a: None,
                 b: Some(44),
             }],
-        }),
+        }]),
     );
 }
 
@@ -186,11 +186,11 @@ fn required_list_of_required_elements_argument_coercion() {
             winningNumbers(numbers: [5, 25, 100])
         }
         "###,
-        Ok(Schema {
-            query: vec![User::WinningNumbers {
+        Ok(vec![Schema::Query {
+            selection: vec![User::WinningNumbers {
                 numbers: vec![5, 25, 100],
             }],
-        }),
+        }]),
     )
 }
 
@@ -202,11 +202,11 @@ fn optional_list_of_optional_elements_argument_coercion() {
             allPrimes(nums: [3, 8, 0, -22])
         }
         "###,
-        Ok(Schema {
-            query: vec![User::AllPrimes {
+        Ok(vec![Schema::Query {
+            selection: vec![User::AllPrimes {
                 nums: Some(vec![Some(3), Some(8), Some(0), Some(-22)]),
             }],
-        }),
+        }]),
     );
 }
 
@@ -218,9 +218,9 @@ fn null_argument_coercion() {
             sayHello(name: null)
         }
         "##,
-        Ok(Schema {
-            query: vec![User::SayHello { name: None }],
-        }),
+        Ok(vec![Schema::Query {
+            selection: vec![User::SayHello { name: None }],
+        }]),
     )
 }
 
@@ -237,8 +237,8 @@ fn required_object_argument_coercion() {
             })
         }
         "##,
-        Ok(Schema {
-            query: vec![User::IsAGoodDog {
+        Ok(vec![Schema::Query {
+            selection: vec![User::IsAGoodDog {
                 dog: Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -246,7 +246,7 @@ fn required_object_argument_coercion() {
                     has_chip: Some(true),
                 },
             }],
-        }),
+        }]),
     )
 }
 
@@ -258,9 +258,9 @@ fn optional_object_argument_coercion_with_null() {
             petDog(dog: null)
         }
         "##,
-        Ok(Schema {
-            query: vec![User::PetDog { dog: None }],
-        }),
+        Ok(vec![Schema::Query {
+            selection: vec![User::PetDog { dog: None }],
+        }]),
     )
 }
 
@@ -276,8 +276,8 @@ fn arguments_with_composed_names() {
             })
         }
         "##,
-        Ok(Schema {
-            query: vec![User::PetDog {
+        Ok(vec![Schema::Query {
+            selection: vec![User::PetDog {
                 dog: Some(Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -285,7 +285,7 @@ fn arguments_with_composed_names() {
                     vaccinated: None,
                 }),
             }],
-        }),
+        }]),
     )
 }
 
@@ -301,8 +301,8 @@ fn optional_object_argument_coercion_with_value() {
             })
         }
         "##,
-        Ok(Schema {
-            query: vec![User::PetDog {
+        Ok(vec![Schema::Query {
+            selection: vec![User::PetDog {
                 dog: Some(Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -310,7 +310,7 @@ fn optional_object_argument_coercion_with_value() {
                     has_chip: None,
                 }),
             }],
-        }),
+        }]),
     )
 }
 
@@ -324,12 +324,12 @@ fn field_returning_object() {
             }
         }
         "##,
-        Ok(Schema {
-            query: vec![User::GetInbox {
+        Ok(vec![Schema::Query {
+            selection: vec![User::GetInbox {
                 selection: vec![Email::AttachmentsContainDogPhotos],
                 index: Some(3),
             }],
-        }),
+        }]),
     )
 }
 
@@ -350,20 +350,26 @@ fn union_coercion() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Search {
-                text: Some("Jar Jar Binks".to_string()),
-                selection: vec![
-                    star_wars::SearchResult::OnHuman(vec![
-                        star_wars::Human::Name,
-                        star_wars::Human::HomePlanet,
-                    ]),
-                    star_wars::SearchResult::OnDroid(vec![star_wars::Droid::Name]),
-                ],
-            }],
-        }),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Search {
+                    text: Some("Jar Jar Binks".to_string()),
+                    selection: vec![
+                        star_wars::SearchResult::OnHuman(vec![
+                            star_wars::Human::Name,
+                            star_wars::Human::HomePlanet,
+                        ]),
+                        star_wars::SearchResult::OnDroid(vec![star_wars::Droid::Name]),
+                    ],
+                }],
+            },
+            star_wars::Schema::Mutation {
+                selection: Vec::new(),
+            },
+            star_wars::Schema::Subscription {
+                selection: Vec::new(),
+            },
+        ]),
     );
 }
 
@@ -378,14 +384,20 @@ fn enum_argument_coercion() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Hero {
-                episode: Some(star_wars::Episode::Jedi),
-                selection: vec![star_wars::Character::Name],
-            }],
-        }),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Hero {
+                    episode: Some(star_wars::Episode::Jedi),
+                    selection: vec![star_wars::Character::Name],
+                }],
+            },
+            star_wars::Schema::Mutation {
+                selection: Vec::new(),
+            },
+            star_wars::Schema::Subscription {
+                selection: Vec::new(),
+            },
+        ]),
     );
 }
 
@@ -400,16 +412,22 @@ fn default_values() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Starship {
-                id: "42".to_string(),
-                selection: vec![star_wars::Starship::Length {
-                    unit: Some(star_wars::LengthUnit::Meter),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Starship {
+                    id: "42".to_string(),
+                    selection: vec![star_wars::Starship::Length {
+                        unit: Some(star_wars::LengthUnit::Meter),
+                    }],
                 }],
-            }],
-        }),
+            },
+            star_wars::Schema::Mutation {
+                selection: Vec::new(),
+            },
+            star_wars::Schema::Subscription {
+                selection: Vec::new(),
+            },
+        ]),
     )
 }
 
@@ -431,14 +449,20 @@ fn enum_variable() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Hero {
-                episode: Some(star_wars::Episode::Jedi),
-                selection: vec![star_wars::Character::Name],
-            }],
-        }),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Hero {
+                    episode: Some(star_wars::Episode::Jedi),
+                    selection: vec![star_wars::Character::Name],
+                }],
+            },
+            star_wars::Schema::Mutation {
+                selection: Vec::new(),
+            },
+            star_wars::Schema::Subscription {
+                selection: Vec::new(),
+            },
+        ]),
     )
 }
 
@@ -461,14 +485,16 @@ fn string_variable() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Starship {
-                id: "Millenium Falcon!!!".to_string(),
-                selection: vec![star_wars::Starship::Name],
-            }],
-        }),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Starship {
+                    id: "Millenium Falcon!!!".to_string(),
+                    selection: vec![star_wars::Starship::Name],
+                }],
+            },
+            star_wars::Schema::Mutation { selection: vec![] },
+            star_wars::Schema::Subscription { selection: vec![] },
+        ]),
     )
 }
 
@@ -489,8 +515,8 @@ fn input_object_variable() {
             petDog(dog: $good_dog)
         }
         "##,
-        Ok(Schema {
-            query: vec![User::PetDog {
+        Ok(vec![Schema::Query {
+            selection: vec![User::PetDog {
                 dog: Some(Dog {
                     name: "Waffles".to_string(),
                     weight: 12,
@@ -498,7 +524,7 @@ fn input_object_variable() {
                     vaccinated: None,
                 }),
             }],
-        }),
+        }]),
     )
 }
 
@@ -522,8 +548,8 @@ fn missing_variables() {
             double(num: $my_number)
         }
         "##,
-        Ok(Schema {
-            query: vec![
+        Ok(vec![Schema::Query {
+            selection: vec![
                 User::Compare {
                     a: None,
                     b: Some(43),
@@ -534,7 +560,7 @@ fn missing_variables() {
                 },
                 User::Double { num: 43 },
             ],
-        }),
+        }]),
     )
 }
 
@@ -554,11 +580,11 @@ fn other_primitive_variable_types() {
             allPrimes(nums: $numbers)
         }
         "##,
-        Ok(Schema {
-            query: vec![User::AllPrimes {
+        Ok(vec![Schema::Query {
+            selection: vec![User::AllPrimes {
                 nums: Some(vec![Some(12), Some(83), Some(38), Some(-20), Some(10000)]),
             }],
-        }),
+        }]),
     );
 }
 
@@ -582,24 +608,30 @@ fn interface_with_field_and_spread_selection() {
             }
         }
         "##,
-        Ok(star_wars::Schema {
-            mutation: Vec::new(),
-            subscription: Vec::new(),
-            query: vec![star_wars::Query::Character {
-                id: "yoda".to_string(),
-                selection: vec![
-                    star_wars::Character::Id,
-                    star_wars::Character::Name,
-                    star_wars::Character::AppearsIn,
-                    star_wars::Character::OnHuman(vec![
-                        star_wars::Human::Height {
-                            unit: Some(star_wars::LengthUnit::Meter),
-                        },
-                        star_wars::Human::HomePlanet,
-                    ]),
-                    star_wars::Character::OnDroid(vec![star_wars::Droid::PrimaryFunction]),
-                ],
-            }],
-        }),
+        Ok(vec![
+            star_wars::Schema::Query {
+                selection: vec![star_wars::Query::Character {
+                    id: "yoda".to_string(),
+                    selection: vec![
+                        star_wars::Character::Id,
+                        star_wars::Character::Name,
+                        star_wars::Character::AppearsIn,
+                        star_wars::Character::OnHuman(vec![
+                            star_wars::Human::Height {
+                                unit: Some(star_wars::LengthUnit::Meter),
+                            },
+                            star_wars::Human::HomePlanet,
+                        ]),
+                        star_wars::Character::OnDroid(vec![star_wars::Droid::PrimaryFunction]),
+                    ],
+                }],
+            },
+            star_wars::Schema::Mutation {
+                selection: Vec::new(),
+            },
+            star_wars::Schema::Subscription {
+                selection: Vec::new(),
+            },
+        ]),
     );
 }

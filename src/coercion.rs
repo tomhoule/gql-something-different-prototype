@@ -8,7 +8,7 @@ pub struct CoercionError;
 
 /// This should be implemented by the schema. It coerces a Schema struct from a query root, recursively coercing fields.
 pub trait CoerceQueryDocument: Sized {
-    fn coerce(query: &Document, context: &ValidationContext) -> Result<Self, CoercionError>;
+    fn coerce(query: &Document, context: &ValidationContext) -> Result<Vec<Self>, CoercionError>;
 }
 
 /// Coerces a selection into the corresponding object, interface or union type

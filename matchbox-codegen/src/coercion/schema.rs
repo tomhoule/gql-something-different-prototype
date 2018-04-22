@@ -9,23 +9,27 @@ impl ImplCoerce for SchemaDefinition {
     fn impl_coerce(&self, _context: &DeriveContext) -> quote::Tokens {
         let mut field_values: Vec<Term> = Vec::new();
         let mut field_names: Vec<Term> = Vec::new();
+        let mut operations: Vec<Term> = Vec::new();
 
         if let Some(ref name) = self.query {
             let name = Term::new(name.as_str(), Span::call_site());
             field_values.push(name);
             field_names.push(Term::new("query", Span::call_site()));
+            operations.push(Term::new("Query", Span::call_site()));
         }
 
         if let Some(ref name) = self.mutation {
             let name = Term::new(name.as_str(), Span::call_site());
             field_values.push(name);
             field_names.push(Term::new("mutation", Span::call_site()));
+            operations.push(Term::new("Mutation", Span::call_site()));
         }
 
         if let Some(ref name) = self.subscription {
             let name = Term::new(name.as_str(), Span::call_site());
             field_values.push(name);
             field_names.push(Term::new("subscription", Span::call_site()));
+            operations.push(Term::new("Subscription", Span::call_site()));
         }
 
         let node_types: Vec<Term> = field_names
@@ -42,7 +46,7 @@ impl ImplCoerce for SchemaDefinition {
                 fn coerce(
                     document: &::tokio_gql::graphql_parser::query::Document,
                     context: &::tokio_gql::query_validation::ValidationContext
-                ) -> Result<Self, ::tokio_gql::coercion::CoercionError> {
+                ) -> Result<Vec<Self>, ::tokio_gql::coercion::CoercionError> {
                     #(
                         let #field_names: Result<Vec<#field_values>, _> = document.definitions
                             .iter()
@@ -63,9 +67,13 @@ impl ImplCoerce for SchemaDefinition {
                         let #field_names_2 = #field_names_3?;
                     )*
 
-                    Ok(Schema {
-                        #(#field_names_4),*
-                    })
+                    Ok(
+                        vec![
+                            #(
+                                Schema::#operations { selection: #field_names_4 },
+                            )*
+                        ]
+                    )
                 }
             }
         }
