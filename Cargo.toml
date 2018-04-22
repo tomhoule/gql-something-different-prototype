@@ -21,6 +21,7 @@ members = [
     "examples/echo-server",
     "examples/library",
     "examples/library/included_library",
+    "matchbox-dataloader",
     "introspection",
     "something-different-derive",
     "standalone-server",
