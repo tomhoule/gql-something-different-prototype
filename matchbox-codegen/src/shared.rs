@@ -162,6 +162,11 @@ pub fn schema_name_to_response_name(name: &str) -> String {
     format!("{}Response", name)
 }
 
+/// Used for implementing responder
+pub fn schema_name_to_responder_name(name: &str) -> String {
+    format!("{}Responder", name)
+}
+
 /// Figure out the name of the responder for a field
 pub fn responder_type_name(field: graphql_parser::schema::Field) -> String {
     unimplemented!();

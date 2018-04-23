@@ -18,40 +18,40 @@ impl<'a, T: PathFragment> PathFragment for &'a T {
     }
 }
 
-pub struct Response {
-    async_fields: Vec<ResponseFut>,
-    resolved_fields: HashMap<String, json::Value>,
-    path: Vec<&'static str>,
-}
+// pub struct Response {
+//     async_fields: Vec<ResponseFut>,
+//     resolved_fields: HashMap<String, json::Value>,
+//     path: Vec<&'static str>,
+// }
 
-type ResponseFut = Box<Future<Item = json::Value, Error = ::errors::ResolverError>>;
+// type ResponseFut = Box<Future<Item = json::Value, Error = ::errors::ResolverError>>;
 
-impl Response {
-    pub fn new() -> Response {
-        Response::create(&[])
-    }
+// impl Response {
+//     pub fn new() -> Response {
+//         Response::create(&[])
+//     }
 
-    pub fn create(prefix: &[&'static str]) -> Response {
-        Response {
-            async_fields: Vec::new(),
-            resolved_fields: HashMap::new(),
-            path: prefix.to_owned(),
-        }
-    }
+//     pub fn create(prefix: &[&'static str]) -> Response {
+//         Response {
+//             async_fields: Vec::new(),
+//             resolved_fields: HashMap::new(),
+//             path: prefix.to_owned(),
+//         }
+//     }
 
-    pub fn on<T: PathFragment>(
-        fields: Vec<T>,
-        handler: impl Fn(&T, Response) -> ResponseValue,
-    ) -> HashMap<&'static str, ResponseValue> {
-        let mut result_value = HashMap::with_capacity(fields.len());
+//     pub fn on<T: PathFragment>(
+//         fields: Vec<T>,
+//         handler: impl Fn(&T, Response) -> ResponseValue,
+//     ) -> HashMap<&'static str, ResponseValue> {
+//         let mut result_value = HashMap::with_capacity(fields.len());
 
-        for field in fields {
-            result_value.insert(field.as_path_fragment(), handler(&field, Response::new()));
-        }
+//         for field in fields {
+//             result_value.insert(field.as_path_fragment(), handler(&field, Response::new()));
+//         }
 
-        result_value
-    }
-}
+//         result_value
+//     }
+// }
 
 // impl IntoFuture for Response {
 //     type Item = json::Value;
@@ -79,8 +79,10 @@ impl Response {
 //     }
 // }
 
-pub enum ResponseValue {
-    Node(Box<Future<Item = (&'static str, json::Value), Error = ::errors::ResolverError>>),
+pub enum Response {
+    Async(Box<Future<Item = (&'static str, json::Value), Error = ::errors::ResolverError>>),
+    /// Produced by attaching to a dataloader
+    // Deferred(::futures::sync::oneshot::Receiver<json::Value>),
     Immediate((&'static str, json::Value)),
 }
 
