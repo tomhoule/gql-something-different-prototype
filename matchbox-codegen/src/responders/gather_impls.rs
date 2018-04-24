@@ -9,9 +9,5 @@ pub fn gather_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         result.push(schema.impl_responder(&context));
     }
 
-    // for object_type in context.object_types.iter() {
-    //     result.push(object_type.impl_responder(&context));
-    // }
-
     result
 }
