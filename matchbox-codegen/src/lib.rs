@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 extern crate graphql_parser;
 extern crate heck;
@@ -36,6 +36,7 @@ pub fn expand_schema(schema: &str) -> quote::Tokens {
     let path_fragment_impls = path_fragment::path_fragment_impls(&context);
 
     let introspection_constants = introspection::introspect::introspect_context(&context);
+    let responder_impls = responders::gather_impls::gather_impls(&context);
 
     quote! {
         #(#definitions)*
@@ -43,6 +44,8 @@ pub fn expand_schema(schema: &str) -> quote::Tokens {
         #(#coerce_impls)*
 
         #(#path_fragment_impls)*
+
+        #(#responder_impls)*
 
         #introspection_constants
     }

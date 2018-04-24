@@ -1,3 +1,4 @@
+extern crate futures;
 #[macro_use]
 extern crate tokio_gql;
 #[macro_use]
