@@ -10,6 +10,7 @@ extern crate serde_json;
 extern crate graphql_parser;
 use graphql_parser::query::*;
 
+use std::default::Default;
 use tokio_gql::coercion::*;
 
 #[allow(dead_code)]
@@ -54,7 +55,14 @@ fn query_coercion_works() {
     }
     "##;
     let expected = Ok(vec![Operation::Query {
-        selection: vec![User::LastName, User::Greeting],
+        selection: vec![
+            User::LastName {
+                respond: Default::default(),
+            },
+            User::Greeting {
+                respond: Default::default(),
+            },
+        ],
     }]);
     test_coercion::<Operation>(query, expected);
 }
@@ -68,6 +76,7 @@ fn basic_argument_coercion() {
     "##;
     let expected = Ok(vec![Operation::Query {
         selection: vec![User::SayHello {
+            respond: Default::default(),
             name: Some("Emilio".to_string()),
         }],
     }]);
@@ -83,7 +92,10 @@ fn optional_argument_coercion_none() {
     }
     "##,
         Ok(vec![Operation::Query {
-            selection: vec![User::SayHello { name: None }],
+            selection: vec![User::SayHello {
+                respond: Default::default(),
+                name: None,
+            }],
         }]),
     );
 }
@@ -98,6 +110,7 @@ fn optional_argument_coercion_some() {
     "##,
         Ok(vec![Operation::Query {
             selection: vec![User::SayHello {
+                respond: Default::default(),
                 name: Some("Pikachu".to_string()),
             }],
         }]),
@@ -114,7 +127,10 @@ fn wrong_argument_name_coercion() {
     }
     "##,
         Ok(vec![Operation::Query {
-            selection: vec![User::SayHello { name: None }],
+            selection: vec![User::SayHello {
+                respond: Default::default(),
+                name: None,
+            }],
         }]),
     );
 }
@@ -140,7 +156,10 @@ fn int_argument_coercion() {
         }
         "##,
         Ok(vec![Operation::Query {
-            selection: vec![User::Double { num: 4 }],
+            selection: vec![User::Double {
+                respond: Default::default(),
+                num: 4,
+            }],
         }]),
     )
 }
@@ -155,6 +174,7 @@ fn multiple_arguments_coercion() {
         "###,
         Ok(vec![Operation::Query {
             selection: vec![User::Compare {
+                respond: Default::default(),
                 a: Some("fourty odd".to_string()),
                 b: Some(44),
             }],
@@ -174,6 +194,7 @@ fn coercion_with_optional_variable_on_optional_field() {
         "###,
         Ok(vec![Operation::Query {
             selection: vec![User::Compare {
+                respond: Default::default(),
                 a: None,
                 b: Some(44),
             }],
@@ -191,6 +212,7 @@ fn required_list_of_required_elements_argument_coercion() {
         "###,
         Ok(vec![Operation::Query {
             selection: vec![User::WinningNumbers {
+                respond: Default::default(),
                 numbers: vec![5, 25, 100],
             }],
         }]),
@@ -207,6 +229,7 @@ fn optional_list_of_optional_elements_argument_coercion() {
         "###,
         Ok(vec![Operation::Query {
             selection: vec![User::AllPrimes {
+                respond: Default::default(),
                 nums: Some(vec![Some(3), Some(8), Some(0), Some(-22)]),
             }],
         }]),
@@ -222,7 +245,10 @@ fn null_argument_coercion() {
         }
         "##,
         Ok(vec![Operation::Query {
-            selection: vec![User::SayHello { name: None }],
+            selection: vec![User::SayHello {
+                respond: Default::default(),
+                name: None,
+            }],
         }]),
     )
 }
@@ -242,6 +268,7 @@ fn required_object_argument_coercion() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::IsAGoodDog {
+                respond: Default::default(),
                 dog: Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -262,7 +289,10 @@ fn optional_object_argument_coercion_with_null() {
         }
         "##,
         Ok(vec![Operation::Query {
-            selection: vec![User::PetDog { dog: None }],
+            selection: vec![User::PetDog {
+                respond: Default::default(),
+                dog: None,
+            }],
         }]),
     )
 }
@@ -281,6 +311,7 @@ fn arguments_with_composed_names() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::PetDog {
+                respond: Default::default(),
                 dog: Some(Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -306,6 +337,7 @@ fn optional_object_argument_coercion_with_value() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::PetDog {
+                respond: Default::default(),
                 dog: Some(Dog {
                     name: "Hachi".to_string(),
                     weight: 12,
@@ -329,7 +361,10 @@ fn field_returning_object() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::GetInbox {
-                selection: vec![Email::AttachmentsContainDogPhotos],
+                respond: Default::default(),
+                selection: vec![Email::AttachmentsContainDogPhotos {
+                    respond: Default::default(),
+                }],
                 index: Some(3),
             }],
         }]),
@@ -356,13 +391,20 @@ fn union_coercion() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Search {
+                    respond: Default::default(),
                     text: Some("Jar Jar Binks".to_string()),
                     selection: vec![
                         star_wars::SearchResult::OnHuman(vec![
-                            star_wars::Human::Name,
-                            star_wars::Human::HomePlanet,
+                            star_wars::Human::Name {
+                                respond: Default::default(),
+                            },
+                            star_wars::Human::HomePlanet {
+                                respond: Default::default(),
+                            },
                         ]),
-                        star_wars::SearchResult::OnDroid(vec![star_wars::Droid::Name]),
+                        star_wars::SearchResult::OnDroid(vec![star_wars::Droid::Name {
+                            respond: Default::default(),
+                        }]),
                     ],
                 }],
             },
@@ -390,8 +432,11 @@ fn enum_argument_coercion() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Hero {
+                    respond: Default::default(),
                     episode: Some(star_wars::Episode::Jedi),
-                    selection: vec![star_wars::Character::Name],
+                    selection: vec![star_wars::Character::Name {
+                        respond: Default::default(),
+                    }],
                 }],
             },
             star_wars::Operation::Mutation {
@@ -418,8 +463,10 @@ fn default_values() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Starship {
+                    respond: Default::default(),
                     id: "42".to_string(),
                     selection: vec![star_wars::Starship::Length {
+                        respond: Default::default(),
                         unit: Some(star_wars::LengthUnit::Meter),
                     }],
                 }],
@@ -455,8 +502,11 @@ fn enum_variable() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Hero {
+                    respond: Default::default(),
                     episode: Some(star_wars::Episode::Jedi),
-                    selection: vec![star_wars::Character::Name],
+                    selection: vec![star_wars::Character::Name {
+                        respond: Default::default(),
+                    }],
                 }],
             },
             star_wars::Operation::Mutation {
@@ -491,8 +541,11 @@ fn string_variable() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Starship {
+                    respond: Default::default(),
                     id: "Millenium Falcon!!!".to_string(),
-                    selection: vec![star_wars::Starship::Name],
+                    selection: vec![star_wars::Starship::Name {
+                        respond: Default::default(),
+                    }],
                 }],
             },
             star_wars::Operation::Mutation { selection: vec![] },
@@ -520,6 +573,8 @@ fn input_object_variable() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::PetDog {
+                respond: Default::default(),
+
                 dog: Some(Dog {
                     name: "Waffles".to_string(),
                     weight: 12,
@@ -554,14 +609,19 @@ fn missing_variables() {
         Ok(vec![Operation::Query {
             selection: vec![
                 User::Compare {
+                    respond: Default::default(),
                     a: None,
                     b: Some(43),
                 },
                 User::GetInbox {
+                    respond: Default::default(),
                     index: None,
                     selection: vec![],
                 },
-                User::Double { num: 43 },
+                User::Double {
+                    respond: Default::default(),
+                    num: 43,
+                },
             ],
         }]),
     )
@@ -585,6 +645,7 @@ fn other_primitive_variable_types() {
         "##,
         Ok(vec![Operation::Query {
             selection: vec![User::AllPrimes {
+                respond: Default::default(),
                 nums: Some(vec![Some(12), Some(83), Some(38), Some(-20), Some(10000)]),
             }],
         }]),
@@ -614,18 +675,30 @@ fn interface_with_field_and_spread_selection() {
         Ok(vec![
             star_wars::Operation::Query {
                 selection: vec![star_wars::Query::Character {
+                    respond: Default::default(),
                     id: "yoda".to_string(),
                     selection: vec![
-                        star_wars::Character::Id,
-                        star_wars::Character::Name,
-                        star_wars::Character::AppearsIn,
+                        star_wars::Character::Id {
+                            respond: Default::default(),
+                        },
+                        star_wars::Character::Name {
+                            respond: Default::default(),
+                        },
+                        star_wars::Character::AppearsIn {
+                            respond: Default::default(),
+                        },
                         star_wars::Character::OnHuman(vec![
                             star_wars::Human::Height {
+                                respond: Default::default(),
                                 unit: Some(star_wars::LengthUnit::Meter),
                             },
-                            star_wars::Human::HomePlanet,
+                            star_wars::Human::HomePlanet {
+                                respond: Default::default(),
+                            },
                         ]),
-                        star_wars::Character::OnDroid(vec![star_wars::Droid::PrimaryFunction]),
+                        star_wars::Character::OnDroid(vec![star_wars::Droid::PrimaryFunction {
+                            respond: Default::default(),
+                        }]),
                     ],
                 }],
             },

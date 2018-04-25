@@ -16,7 +16,7 @@ pub fn gql_interface_to_rs(
         quote!()
     };
 
-    let field_names = get_field_names(&interface_type.fields, context);
+    let field_names = get_field_names(&interface_type.fields, context, &name);
     let implementor_names: Vec<_> = context
         .object_types
         .iter()
@@ -67,11 +67,11 @@ mod tests {
         "## => {
             #[derive(Debug, PartialEq)]
             pub enum Character {
-                Id,
-                Name,
-                WithWittyComment { meh: Option<bool> },
-                Friends { selection: Vec<Character>, },
-                AppearsIn { selection: Vec<Episode>, },
+                Id { respond: CharacterIdResponder, },
+                Name { respond: CharacterNameResponder, },
+                WithWittyComment { respond: CharacterWithWittyCommentResponder, meh: Option<bool>, },
+                Friends { respond: CharacterFriendsResponder, selection: Vec<Character>, },
+                AppearsIn { respond: CharacterAppearsInResponder, selection: Vec<Episode>, },
             }
         }
         }
@@ -94,15 +94,15 @@ mod tests {
         "## => {
             #[derive(Debug, PartialEq)]
             pub enum Wookie {
-                Id,
-                Name,
-                Hairiness
+                Id { respond: WookieIdResponder, },
+                Name { respond: WookieNameResponder, },
+                Hairiness { respond: WookieHairinessResponder, },
             }
 
             #[derive(Debug, PartialEq)]
             pub enum Character {
-                Id,
-                Name,
+                Id { respond: CharacterIdResponder, },
+                Name { respond: CharacterNameResponder, },
                 OnWookie(Vec<Wookie>),
             }
         }

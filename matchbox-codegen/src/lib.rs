@@ -45,6 +45,16 @@ pub fn expand_schema(schema: &str) -> quote::Tokens {
 
         #(#path_fragment_impls)*
 
+        macro_rules! trivial_default_impl {
+            ($ty:ty, $expr:expr) => {
+                impl ::std::default::Default for $ty {
+                    fn default() -> $ty {
+                        $expr
+                    }
+                }
+            }
+        }
+
         #(#responder_impls)*
 
         #introspection_constants

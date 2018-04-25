@@ -10,7 +10,7 @@ pub fn gql_type_to_rs(
     context: &DeriveContext,
 ) -> quote::Tokens {
     let name = Term::new(object_type.name.as_str(), Span::call_site());
-    let field_names: Vec<quote::Tokens> = get_field_names(&object_type.fields, context);
+    let field_names: Vec<quote::Tokens> = get_field_names(&object_type.fields, context, &name);
     let doc_attr: quote::Tokens = if let Some(ref doc_string) = object_type.description {
         let str_literal = Literal::string(doc_string.as_str());
         quote!(#[doc = #str_literal])
@@ -22,7 +22,7 @@ pub fn gql_type_to_rs(
         #doc_attr
         #[derive(Debug, PartialEq)]
         pub enum #name {
-            #(#field_names),*
+            #(#field_names,)*
         }
     )
 }
@@ -30,6 +30,7 @@ pub fn gql_type_to_rs(
 pub fn get_field_names<'a>(
     fields: impl IntoIterator<Item = &'a graphql_parser::schema::Field>,
     context: &DeriveContext,
+    object_name: &Term,
 ) -> Vec<quote::Tokens> {
     fields
         .into_iter()
@@ -53,10 +54,14 @@ pub fn get_field_names<'a>(
                 };
             let sub_field_set: Option<quote::Tokens> =
                 sub_field_set.map(|set| quote!{ selection: Vec<#set>, });
-            if sub_field_set.is_some() || !args.is_empty() {
-                quote!{#ident { #sub_field_set #(#args),* }}
-            } else {
-                quote!(#ident)
+
+            let responder_type = Term::new(
+                &format!("{}{}Responder", object_name, f.name.to_camel_case()),
+                Span::call_site(),
+            );
+
+            quote!{
+                #ident { respond: #responder_type, #sub_field_set #(#args,)* }
             }
         })
         .collect()
@@ -76,7 +81,7 @@ mod tests {
             }
             "# => {
                 #[derive(Debug, PartialEq)]
-                pub enum Pasta { Shape, Ingredients }
+                pub enum Pasta { Shape { respond: PastaShapeResponder, }, Ingredients { respond: PastaIngredientsResponder, }, }
             }
         }
     }
@@ -92,8 +97,8 @@ mod tests {
             "# => {
                 #[derive(Debug, PartialEq)]
                 pub enum Pasta {
-                    Shape { strict: Option<bool> },
-                    Ingredients { filter: String }
+                    Shape { respond: PastaShapeResponder, strict: Option<bool>, },
+                    Ingredients { respond: PastaIngredientsResponder, filter: String, },
                 }
             }
         }
@@ -113,7 +118,7 @@ mod tests {
             "## => {
                 #[doc = "Represents a point on the plane.\n"]
                 #[derive(Debug, PartialEq)]
-                pub enum Point { X, Y }
+                pub enum Point { X { respond: PointXResponder, }, Y { respond: PointYResponder, }, }
             }
         }
     }
@@ -140,21 +145,21 @@ mod tests {
             "## => {
                 #[derive(Debug, PartialEq)]
                 pub enum DessertDescriptor {
-                    Name,
-                    ContainsChocolate
+                    Name { respond: DessertDescriptorNameResponder, },
+                    ContainsChocolate { respond: DessertDescriptorContainsChocolateResponder, },
                 }
 
                 #[derive(Debug, PartialEq)]
                 pub enum Cheese {
-                    Name,
-                    Blue
+                    Name { respond: CheeseNameResponder, },
+                    Blue { respond: CheeseBlueResponder, },
                 }
 
                 #[derive(Debug, PartialEq)]
                 pub enum Meal {
-                    MainCourse,
-                    Cheese { selection: Vec<Cheese>, vegan: Option<bool> },
-                    Dessert { selection: Vec<DessertDescriptor>, }
+                    MainCourse { respond: MealMainCourseResponder, },
+                    Cheese { respond: MealCheeseResponder, selection: Vec<Cheese>, vegan: Option<bool>, },
+                    Dessert { respond: MealDessertResponder, selection: Vec<DessertDescriptor>, },
                 }
             }
         }
@@ -184,9 +189,9 @@ mod tests {
             "# => {
                 #[derive(Debug, PartialEq)]
                 pub enum Pasta {
-                    Ingredients { filter: String },
-                    Instructions { filter: Option<CookingInstructions> },
-                    Name
+                    Ingredients { respond: PastaIngredientsResponder, filter: String, },
+                    Instructions { respond: PastaInstructionsResponder, filter: Option<CookingInstructions>, },
+                    Name { respond: PastaNameResponder, },
                 }
 
                 #[derive(Debug, PartialEq, Deserialize)]

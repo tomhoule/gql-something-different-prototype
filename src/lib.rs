@@ -18,6 +18,7 @@ pub mod query_validation;
 pub mod resolver;
 pub mod response;
 mod shared;
+pub mod traits;
 
 #[allow(unused_imports)]
 #[macro_use]

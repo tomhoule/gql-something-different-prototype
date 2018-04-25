@@ -53,7 +53,7 @@ pub fn correspondant_type(gql_type: &str) -> &str {
     match gql_type {
         "Int" => "i32",
         "String" => "String",
-        "Double" => "f64",
+        "Float" => "f64",
         "Boolean" => "bool",
         "ID" => "String",
         other => other,
