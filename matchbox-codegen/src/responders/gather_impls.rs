@@ -17,9 +17,9 @@ pub fn gather_impls(context: &DeriveContext) -> Vec<quote::Tokens> {
         result.push(union_type.impl_responder(context));
     }
 
-    // if let Some(schema) = context.get_schema() {
-    //     result.push(schema.impl_responder(&context));
-    // }
+    if let Some(schema) = context.get_schema() {
+        result.push(schema.impl_responder(&context));
+    }
 
     result
 }

@@ -6,6 +6,7 @@ pub type ResolverFuture = Box<Future<Item = json::Value, Error = Vec<ResolverErr
 
 pub trait Resolver {
     type Schema;
+    type Responder;
 
-    fn resolve(&self, request: Self::Schema) -> ResolverFuture;
+    fn resolve(&self, request: Self::Schema, response: Self::Responder) -> ResolverFuture;
 }

@@ -60,7 +60,20 @@ fn field_impl_inner(
                     &::shared::schema_name_to_responder_name(name),
                     Span::call_site(),
                 );
-                quote!{ type #responder_name = #object_responder_name; }
+                quote!{
+                    #[derive(Debug, PartialEq)]
+                    pub struct #responder_name;
+                    trivial_default_impl!(#responder_name, #responder_name);
+
+                    impl #responder_name {
+                        pub fn to(selection: ..., resolver: ...) -> impl ::futures::Future<Item = (), Error = ::tokio_gql::errors::ResolverError> {
+                            #object_responder_name::default().to(selection, resolver).and_then(|json| {
+                                (..., json)
+                            })
+                        }
+                    }
+                    // #object_responder_name;
+                }
                 // let object_type = context
                 //     .object_types
                 //     .iter()

@@ -40,34 +40,43 @@ impl ImplResponder for schema::ObjectType {
             trivial_default_impl!(#responder_name, #responder_name);
 
             impl #responder_name {
-                pub fn to<Resolver>(
+                pub fn to<LoaderFuture, Loader, Data, Resolver>(
                     &self,
                     selection: Vec<#variant_name>,
-                    resolver: Resolver
-                ) -> impl ::futures::future::Future<Item = ::serde_json::Value, Error = ::tokio_gql::errors::ResolverError>
+                    loader: Loader,
+                    resolver: Resolver,
+                ) -> Box<::futures::Future<Item = ::serde_json::Value, Error = ::tokio_gql::errors::ResolverError>
                 where
-                    Resolver: Fn(#variant_name) -> Result<::tokio_gql::response::Response, ::tokio_gql::errors::ResolverError> {
+                    Loader: Fn(&[#variant_name]) -> LoaderFuture,
+                    LoaderFuture: ::futures::Future<Item = Data, Error = ::tokio_gql::errors::ResolverError>,
+                    Resolver: Fn(#variant_name, &Data) -> ::tokio_gql::response::Response {
 
-                    use futures::prelude::Future;
+                    use ::futures::prelude::Future;
 
-                    let mut result = ::serde_json::Map::with_capacity(selection.len());
-                    let mut async_fields: Vec<_> = Vec::new();
+                    loader(&selection).and_then(move |data| {
+                        let mut result = ::serde_json::Map::with_capacity(selection.len());
+                        let mut async_fields: Vec<_> = Vec::new();
 
-                    for field in selection.into_iter() {
-                        let response = resolver(field);
-                        match response.unwrap() {
-                            ::tokio_gql::response::Response::Immediate(kv) => {
-                                result.insert(kv.0.to_string(), kv.1);
-                            }
-                            ::tokio_gql::response::Response::Async(fut) => {
-                                async_fields.push(fut)
+                        for field in selection.into_iter() {
+                            let response = resolver(&data, field);
+                            match response {
+                                ::tokio_gql::response::Response::Immediate(kv) => {
+                                    result.insert(kv.0.to_string(), kv.1);
+                                }
+                                ::tokio_gql::response::Response::Async(fut) => {
+                                    async_fields.push(fut)
+                                }
                             }
                         }
-                    }
 
-                    ::futures::future::join_all(async_fields).and_then(move |resolved| {
-                        result.extend(resolved.into_iter().map(|(k, v)| (k.to_string(), v)));
-                        Ok(::serde_json::Value::Object(result))
+                        Box::new(
+                            ::futures::future::join_all(async_fields)
+                                .map(move |r| (result, r))
+                                .and_then(move |(mut result, resolved)| {
+                                    result.extend(resolved.into_iter().map(|(k, v)| (k.to_string(), v)));
+                                    Ok(::serde_json::Value::Object(result))
+                                })
+                        )
                     })
                 }
             }
