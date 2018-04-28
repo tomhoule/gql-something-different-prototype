@@ -41,7 +41,13 @@ fn field_impl_inner(
     context: &DeriveContext,
     non_nullable: bool,
 ) -> quote::Tokens {
-    match ty {
+    let responder_struct = quote! {
+        #[derive(Debug, PartialEq)]
+        pub struct #responder_name;
+        trivial_default_impl!(#responder_name, #responder_name);
+    };
+
+    let struct_impl = match ty {
         schema::Type::NonNullType(inner) => {
             field_impl_inner(responder_name, field_name, inner, context, true)
         }
@@ -50,70 +56,64 @@ fn field_impl_inner(
             if context.is_scalar(&name) {
                 scalar_responder_impl(responder_name, field_name, name, context, non_nullable)
             } else if context.is_enum(&name) {
-                quote! {
-                    #[derive(Debug, PartialEq)]
-                    pub struct #responder_name;
-                    trivial_default_impl!(#responder_name, #responder_name);
-                }
+                quote!{}
             } else {
-                let object_responder_name = Term::new(
-                    &::shared::schema_name_to_responder_name(name),
-                    Span::call_site(),
-                );
-                quote!{
-                    #[derive(Debug, PartialEq)]
-                    pub struct #responder_name;
-                    trivial_default_impl!(#responder_name, #responder_name);
-
-                    impl #responder_name {
-                        pub fn to(selection: ..., resolver: ...) -> impl ::futures::Future<Item = (), Error = ::tokio_gql::errors::ResolverError> {
-                            #object_responder_name::default().to(selection, resolver).and_then(|json| {
-                                (..., json)
-                            })
-                        }
-                    }
-                    // #object_responder_name;
+                // let object_responder_name = Term::new(
+                //     &::shared::schema_name_to_responder_name(name),
+                //     Span::call_site(),
+                // );
+                // quote!{
+                //     impl #responder_name {
+                //         pub fn to(selection: ..., resolver: ...) -> impl ::futures::Future<Item = (), Error = ::tokio_gql::errors::ResolverError> {
+                //             #object_responder_name::default().to(selection, resolver).and_then(|json| {
+                //                 (..., json)
+                //             })
+                //         }
+                //     }
+                //     // #object_responder_name;
+                // }
+                let object_type = context
+                    .object_types
+                    .iter()
+                    .find(|ty| ty.name == name.as_str());
+                let interface_type = context
+                    .interface_types
+                    .values()
+                    .find(|ty| ty.name == name.as_str());
+                let union_type = context
+                    .union_types
+                    .values()
+                    .find(|ty| ty.name == name.as_str());
+                if object_type.is_none() && interface_type.is_none() && union_type.is_none() {
+                    panic!("No declaration found for field type {}", name);
                 }
-                // let object_type = context
-                //     .object_types
-                //     .iter()
-                //     .find(|ty| ty.name == name.as_str());
-                // let interface_type = context
-                //     .interface_types
-                //     .values()
-                //     .find(|ty| ty.name == name.as_str());
-                // let union_type = context
-                //     .union_types
-                //     .values()
-                //     .find(|ty| ty.name == name.as_str());
-                // if object_type.is_none() && interface_type.is_none() && union_type.is_none() {
-                //     panic!("No declaration found for field type {}", name);
-                // }
 
-                // if let Some(object_type) = object_type {
-                //     return object_type.impl_responder(context);
-                // }
+                if let Some(object_type) = object_type {
+                    return object_type.impl_responder(context);
+                }
 
-                // if let Some(interface_type) = interface_type {
-                //     return interface_type.impl_responder(context);
-                // }
+                if let Some(interface_type) = interface_type {
+                    return interface_type.impl_responder(context);
+                }
 
-                // if let Some(union_type) = union_type {
-                //     return union_type.impl_responder(context);
-                // }
+                if let Some(union_type) = union_type {
+                    return union_type.impl_responder(context);
+                }
 
-                // unreachable!();
+                unreachable!();
             }
+        };
+
+        quote! {
+            #responder_struct
+
+            #struct_impl
         }
     }
 }
 
 fn list_responder_impl(responder_name: &Term, inner_type: &schema::Type) -> quote::Tokens {
     quote! {
-        #[derive(Debug, PartialEq)]
-        pub struct #responder_name;
-        trivial_default_impl!(#responder_name, #responder_name);
-
         // impl #responder_name {
         //     fn to_each<Reponder, ResponderFuture>(selection: Vec<Never>, responder: Responder) -> Never
         //     where
@@ -139,14 +139,22 @@ fn scalar_responder_impl(
     };
     let rust_ty = ::shared::graphql_type_to_response_type(&param_type, context);
     quote! {
-        #[derive(Debug, PartialEq)]
-        pub struct #responder_name;
-        trivial_default_impl!(#responder_name, #responder_name);
-
         impl #responder_name {
             pub fn with(&self, value: #rust_ty) -> ::tokio_gql::response::Response {
                 ::tokio_gql::response::Response::Immediate((#field_name , <#rust_ty as ::tokio_gql::traits::IntoJson>::into_json(value)))
             }
         }
     }
+}
+
+fn object_responder_impl() -> quote::Tokens {
+    quote!{}
+}
+
+fn interface_responder_impl() -> quote::Tokens {
+    quote!{}
+}
+
+fn union_responder_impl() -> quote::Tokens {
+    quote!{}
 }
