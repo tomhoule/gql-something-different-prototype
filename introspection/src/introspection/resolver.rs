@@ -2,8 +2,8 @@ use futures::prelude::*;
 use introspection::schema;
 use serde_json as json;
 use tokio_gql::introspection::Schema;
+use tokio_gql::resolver::Resolver;
 use tokio_gql::response::Response;
-use tokio_gql::service::GqlService;
 
 pub struct IntrospectionResolver {
     schema_root: Schema,
@@ -18,19 +18,13 @@ impl IntrospectionResolver {
 #[derive(Debug, PartialEq)]
 pub struct Error;
 
-impl GqlService for IntrospectionResolver {
-    type Schema = schema::Schema;
-    type Error = Error;
+impl Resolver for IntrospectionResolver {
+    type Schema = schema::Operation;
 
     fn resolve(
         &self,
         request: Self::Schema,
-        response: Response<Self::Error>,
-    ) -> Box<Future<Item = json::Value, Error = Self::Error>> {
-        unimplemented!();
-    }
-
-    fn handle_errors(&self, errors: ::tokio_gql::errors::GqlError<Self::Error>) -> json::Value {
+    ) -> Box<Future<Item = json::Value, Error = Vec<::tokio_gql::errors::ResolverError>>> {
         unimplemented!();
     }
 }

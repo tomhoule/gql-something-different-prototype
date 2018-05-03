@@ -139,20 +139,21 @@ fn field_variant_constructor(
         .map(|arg| Term::new(&arg.name.to_mixed_case(), Span::call_site()))
         .collect();
     let argument_idents_clone = argument_idents.clone();
+    let responder = quote! { respond: ::std::default::Default::default() };
     if argument_idents.is_empty()
         && (context.is_scalar(field_type_name) || context.is_enum(field_type_name))
     {
-        quote!(#field_name::#variant_name)
+        quote!(#field_name::#variant_name { #responder })
     } else if !argument_idents.is_empty()
         && !(context.is_scalar(field_type_name) || context.is_enum(field_type_name))
     {
         let field_type = Term::new(field_type_name, Span::call_site());
-        quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap(), #(#argument_idents_clone),* })
+        quote!(#field_name::#variant_name { #responder, selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap(), #(#argument_idents_clone),* })
     } else if argument_idents.is_empty() {
         let field_type = Term::new(field_type_name, Span::call_site());
-        quote!(#field_name::#variant_name { selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
+        quote!(#field_name::#variant_name { #responder, selection: <#field_type as ::tokio_gql::coercion::CoerceSelection>::coerce(&field.selection_set, context).unwrap() })
     } else {
-        quote!(#field_name::#variant_name { #(#argument_idents_clone),* })
+        quote!(#field_name::#variant_name { #responder, #(#argument_idents_clone),* })
     }
 }
 

@@ -10,3 +10,6 @@ serde_json = "*"
 
 [dependencies.tokio-gql]
 path = "../.."
+
+[dependencies.standalone-server]
+path = "../../standalone-server"

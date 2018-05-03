@@ -23,6 +23,8 @@ members = [
     "examples/library/included_library",
     "matchbox-dataloader",
     "introspection",
+    "matchbox-cli",
+    "matchbox-codegen",
     "something-different-derive",
     "standalone-server",
 ]

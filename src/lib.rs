@@ -6,7 +6,7 @@ extern crate matches;
 extern crate hyper;
 extern crate serde;
 #[macro_use]
-extern crate serde_json as json;
+extern crate serde_json;
 
 pub extern crate graphql_parser;
 
@@ -15,9 +15,10 @@ pub mod errors;
 pub mod identifiable;
 pub mod introspection;
 pub mod query_validation;
+pub mod resolver;
 pub mod response;
-pub mod service;
 mod shared;
+pub mod traits;
 
 #[allow(unused_imports)]
 #[macro_use]

@@ -7,19 +7,12 @@ use quote;
 use shared;
 
 impl ImplPathFragment for graphql_parser::schema::ObjectType {
-    fn impl_path_fragment(&self, context: &DeriveContext) -> quote::Tokens {
+    fn impl_path_fragment(&self, _context: &DeriveContext) -> quote::Tokens {
         let object_name = Term::new(&self.name, Span::call_site());
         let variant_matchers = self.fields.iter().map(|field| {
             let term = Term::new(&field.name.to_camel_case(), Span::call_site());
-            let inner_type = shared::extract_inner_name(&field.field_type);
 
-            if field.arguments.is_empty()
-                && (context.is_scalar(inner_type) || context.is_enum(inner_type))
-            {
-                quote!(#object_name::#term)
-            } else {
-                quote!(#object_name::#term { .. })
-            }
+            quote!(#object_name::#term { .. })
         });
         let name_literals = self.fields.iter().map(|field| &field.name);
 
@@ -62,7 +55,7 @@ mod tests {
             impl ::tokio_gql::response::PathFragment for FriendsEdge {
                 fn as_path_fragment(&self) -> &'static str {
                     match self {
-                        FriendsEdge::Cursor => "cursor",
+                        FriendsEdge::Cursor { .. } => "cursor",
                         FriendsEdge::Node { .. } => "node"
                     }
                 }
